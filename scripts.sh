@@ -32,25 +32,33 @@ cd ~/Medical_Image_Segmentation
 # python main.py --dataset STARE --epochs 200 --phase test --img_size 512 --model_name fang --batch_size 2 --optimizer_name SGD --print_interval 1 --save_interval 1  --lr 0.005 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
 
 
-# ### final metric 0.5 0.5
+# # ### final metric 0.5 0.5
 # python main.py --dataset CHASE_DB1 --epochs 200 --phase test --model_name rollingunet --batch_size 2 --lr 1e-4 --img_size 512 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
-# python main.py --dataset DRIVE --epochs 200 --phase test --model_name rollingunet --batch_size 2 --lr 0.0005 --img_size 512 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
-# python main.py --dataset STARE --epochs 200 --phase test --model_name rollingunet --batch_size 2 --lr 0.0005 --img_size 512 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
+# python main.py --dataset DRIVE --epochs 200 --phase test --model_name rollingunet --batch_size 2 --lr 1e-4 --img_size 512 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
+# python main.py --dataset STARE --epochs 200 --phase test --model_name rollingunet --batch_size 2 --lr 1e-4 --img_size 512 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
 # python main.py --dataset DEEPCRACK --epochs 200 --phase test --model_name rollingunet --batch_size 2 --lr 0.0005 --img_size 256 --print_interval 10 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
 
-# python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 512 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.005 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score 
+# python main.py --dataset CHASE_DB1 --epochs 2 --phase train --img_size 512 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.005 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score 
 # python main.py --dataset STARE --epochs 200 --phase test --img_size 512 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.005 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score 
 # python main.py --dataset DRIVE --epochs 200 --phase test --img_size 512 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.005 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score 
 # python main.py --dataset DEEPCRACK --epochs 200 --phase test --img_size 256 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.005 --print_interval 10 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score 
+## 统一学习率优化器
+# python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.0085 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.0085 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.0085 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE 
 
 
 # #  # ## fang  for edge/skeleton
-# python main.py --dataset CHASE_DB1 --epochs 300 --phase train --img_size 256 --model_name fang --batch_size 2 --optimizer_name SGD --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
-# python main.py --dataset DRIVE --epochs 300 --phase train --img_size 256 --model_name fang --batch_size 2 --optimizer_name SGD --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
-# python main.py --dataset STARE --epochs 300 --phase test --img_size 256 --model_name fang --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+python main.py --dataset CHASE_DB1 --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+python main.py --dataset DRIVE --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+python main.py --dataset STARE --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+
+python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
 
 
-python main.py --dataset DEEPCRACK --epochs 200 --phase test --img_size 256 --model_name fang --batch_size 2 --optimizer_name Adam --print_interval 10 --save_interval 1  --lr 0.005 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
+# python main.py --dataset DEEPCRACK --epochs 200 --phase test --img_size 256 --model_name fang --batch_size 2 --optimizer_name Adam --print_interval 10 --save_interval 1  --lr 0.005 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
 # python main.py --dataset ER --epochs 200 --phase train --img_size 256 --model_name fang --batch_size 2 --optimizer_name Adam --print_interval 5 --save_interval 1  --lr 0.05 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
 # python main.py --dataset MITO --epochs 200 --phase train --img_size 256 --model_name fang --batch_size 2 --optimizer_name Adam --print_interval 5 --save_interval 1  --lr 0.05 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
 
