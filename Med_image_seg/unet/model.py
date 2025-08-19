@@ -17,6 +17,8 @@ from Med_image_seg.fang.utils.cldice import clDice
 # from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+import cv2
+from matplotlib import pyplot as plt
 
 
 
@@ -120,6 +122,12 @@ class unet(base_model):
             log['val_loss'].append(val_log['loss'])
             log['val_iou'].append(val_log['iou'])
             log['val_dice'].append(val_log['dice'])
+            log['val_hd'].append(val_log['hd'])
+            log['val_hd95'].append(val_log['hd95'])
+            log['val_recall'].append(val_log['recall'])
+            log['val_spe'].append(val_log['spe'])
+            log['val_pre'].append(val_log['pre'])
+            log['val_sen'].append(val_log['sen'])
 
             log_file = os.path.join(self.args.log_dir, "res_log.csv")
             pd.DataFrame(log).to_csv(log_file, index=False)
@@ -195,12 +203,7 @@ class unet(base_model):
             self.optimizer.step()
             torch.cuda.empty_cache()
 
-            ## base_lr 0.05 missformer
-            # now_lr = self.args.lr * (1.0 - iter_num / max_iterations) ** 0.9
-            # for param_group in self.optimizer.param_groups:
-            #     param_group['lr'] = now_lr
-
-            # loss_list.append(loss.item())
+            # loss_list.append(loss.item()
             avg_meters['loss'].update(loss.item(), images.size(0))
             avg_meters['iou'].update(iou, images.size(0))
             avg_meters['dice'].update(dice, images.size(0))
@@ -232,7 +235,13 @@ class unet(base_model):
     def val_epoch(self, test_loader):
         avg_meters = {'loss': AverageMeter(),
                       'iou': AverageMeter(),
-                      'dice': AverageMeter()}
+                      'dice': AverageMeter(),
+                      'hd':AverageMeter(),
+                      'hd95':AverageMeter(),
+                      'recall':AverageMeter(),
+                      'spe':AverageMeter(),
+                      'pre':AverageMeter(),
+                      'sen':AverageMeter()}
         self.network.eval()
         # self.dice_ls = []
         # self.Jac_ls=[]
@@ -248,12 +257,18 @@ class unet(base_model):
                 preds = self.network(images) 
                 
                 loss = self.BceDiceLoss(preds, targets)
-                iou, dice = iou_score(preds, targets)
+                # iou, dice = iou_score(preds, targets)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(preds, targets)
 
-                # dice, Jac = self.per_class_dice(preds, targets)
                 avg_meters['loss'].update(loss.item(), images.size(0))
                 avg_meters['iou'].update(iou, images.size(0))
                 avg_meters['dice'].update(dice, images.size(0))
+                avg_meters['hd'].update(hd, images.size(0))
+                avg_meters['hd95'].update(hd95, images.size(0))
+                avg_meters['recall'].update(recall, images.size(0))
+                avg_meters['spe'].update(specificity, images.size(0))
+                avg_meters['pre'].update(precision, images.size(0))
+                avg_meters['sen'].update(sensitivity, images.size(0))
 
                 ########################                                          
                 output = F.sigmoid(preds)
@@ -268,7 +283,13 @@ class unet(base_model):
                 postfix = OrderedDict([
                     ('loss', avg_meters['loss'].avg),
                     ('iou', avg_meters['iou'].avg),
-                    ('dice', avg_meters['dice'].avg)
+                    ('dice', avg_meters['dice'].avg),
+                    ('hd', avg_meters['hd'].avg),
+                    ('hd95', avg_meters['hd95'].avg),
+                    ('recall', avg_meters['recall'].avg),
+                    ('spe', avg_meters['spe'].avg),
+                    ('pre', avg_meters['pre'].avg),
+                    ('sen', avg_meters['sen'].avg)
                 ])
                 pbar.set_postfix(postfix)
                 pbar.update(1)
@@ -276,7 +297,13 @@ class unet(base_model):
 
         return OrderedDict([('loss', avg_meters['loss'].avg),
                         ('iou', avg_meters['iou'].avg),
-                        ('dice', avg_meters['dice'].avg)]), self.cldice_ls
+                        ('dice', avg_meters['dice'].avg),
+                        ('hd', avg_meters['hd'].avg),
+                        ('hd95', avg_meters['hd95'].avg),
+                        ('recall', avg_meters['recall'].avg),
+                        ('spe', avg_meters['spe'].avg),
+                        ('pre', avg_meters['pre'].avg),
+                        ('sen', avg_meters['sen'].avg)]), self.cldice_ls
     
 
 
@@ -322,18 +349,30 @@ class unet(base_model):
                 self.cldice_ls.append(cldc)
                 ################################################ 
 
-                # preds = torch.sigmoid(preds).cpu().numpy()
-                # preds[preds >= 0.5] = 1
-                # preds[preds < 0.5] = 0
 
-                # for i in range(len(output)):
-                #     cv2.imwrite(os.path.join('outputs', args.name, str(c), meta['img_id'][i] + '.png'),
-                #                 (preds[i, c] * 255).astype('uint8'))
-
-
+                size = self.args.img_size / 100
                 if iter % self.args.save_interval == 0:
-                    save_path = self.args.res_dir
-                    self.save_img(images, targets, output_, iter, save_path)
+                    preds = torch.sigmoid(preds).cpu().numpy()
+                    preds[preds >= 0.5] = 1
+                    preds[preds < 0.5] = 0
+                    preds = np.squeeze(preds, axis=0)
+                    preds = np.squeeze(preds, axis=0)
+
+                    plt.figure(figsize=(size,size),dpi=100)
+                    plt.gca().xaxis.set_major_locator(plt.NullLocator())
+                    plt.gca().yaxis.set_major_locator(plt.NullLocator())
+                    plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+                    plt.margins(0,0)
+       
+                    plt.imshow(preds, cmap='gray')  
+                    plt.axis('off')  # 关闭坐标轴
+                    plt.savefig(self.args.res_dir +'/'+ str(iter) +'.png')
+                    plt.close()
+
+
+                # if iter % self.args.save_interval == 0:
+                #     save_path = self.args.res_dir
+                #     self.save_img(images, targets, output_, iter, save_path)
 
         print('IoU: %.4f' % iou_avg_meter.avg)
         print('Dice: %.4f' % dice_avg_meter.avg)
