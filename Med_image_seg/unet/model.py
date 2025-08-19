@@ -111,7 +111,7 @@ class unet(base_model):
 
             ##########################################
             print('epoch %d - loss %.4f - val_loss %.4f - val_iou %.4f - val_dice %.4f'
-              % (start_epoch, train_log['loss'], val_log['loss'], val_log['iou'], val_log['dice']))
+              % (epoch, train_log['loss'], val_log['loss'], val_log['iou'], val_log['dice']))
   
             log['epoch'].append(epoch)
             log['loss'].append(train_log['loss'])
