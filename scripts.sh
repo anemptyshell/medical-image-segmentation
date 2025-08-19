@@ -2,7 +2,7 @@
 
 conda activate MIS
 
-cd ~/Medical_Image_Segmentation
+cd ~/mis-ft/medical-image-segmentation
 
 # python main.py --dataset STARE --epochs 200 --phase test --img_size 512 --model_name laplacianformer --batch_size 2 --optimizer_name SGD --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score --lr 0.01
 # python main.py --dataset DRIVE --epochs 200 --phase test --img_size 512 --model_name laplacianformer --batch_size 2 --optimizer_name SGD --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score --lr 0.01
@@ -49,13 +49,13 @@ cd ~/Medical_Image_Segmentation
 
 
 # #  # ## fang  for edge/skeleton
-python main.py --dataset CHASE_DB1 --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
-python main.py --dataset DRIVE --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
-python main.py --dataset STARE --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset CHASE_DB1 --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset DRIVE --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset STARE --epochs 200 --phase train --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
 
-python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
-python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
-python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name fang1 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
 
 
 # python main.py --dataset DEEPCRACK --epochs 200 --phase test --img_size 256 --model_name fang --batch_size 2 --optimizer_name Adam --print_interval 10 --save_interval 1  --lr 0.005 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score
@@ -67,3 +67,7 @@ python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_
 ## 但drive stare chase 把学习率设置成 0.008 更好了
 
 ## fang DEEPCRACK lr 0.008 dice 0.8315; lr 0.005 dice 0.8410 
+
+
+
+python main.py --dataset STARE --epochs 2 --phase train --img_size 256 --model_name rollingunet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1

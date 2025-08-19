@@ -11,13 +11,12 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet.network import U_Net
+from Med_image_seg.unet_resnet.network import U_Net_resnet
 from Med_image_seg.fang.utils.cldice import clDice
 
 # from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
-import cv2
 from matplotlib import pyplot as plt
 
 
@@ -31,7 +30,7 @@ def arguments():
     return args
 
 
-class unet(base_model):
+class unet_resnet(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -54,7 +53,7 @@ class unet(base_model):
         """ Trainer """ 
         print('#----------Prepareing Model----------#')
 
-        self.network = U_Net().to('cuda')
+        self.network = U_Net_resnet().to('cuda')
         self.step = 0
         self.save_args()
   
