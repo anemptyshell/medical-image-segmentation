@@ -90,6 +90,12 @@ class unet(base_model):
               ('val_loss', []),
               ('val_iou', []),
               ('val_dice', []),
+              ('val_hd', []),
+              ('val_hd95', []),
+              ('val_recall', []),
+              ('val_spe', []),
+              ('val_pre', []),
+              ('val_sen', [])
               ])
       
         ## Resume Model
@@ -109,7 +115,7 @@ class unet(base_model):
 
             # self.step = self.train_epoch(train_loader, epoch, self.step)
             train_log = self.train_epoch(train_loader, epoch, self.step)
-            val_log, cldice= self.val_epoch(test_loader)
+            val_log, cldice= self.val_epoch(test_loader, epoch)
 
             ##########################################
             print('epoch %d - loss %.4f - val_loss %.4f - val_iou %.4f - val_dice %.4f'
@@ -232,7 +238,7 @@ class unet(base_model):
     
 
 
-    def val_epoch(self, test_loader):
+    def val_epoch(self, test_loader, epoch):
         avg_meters = {'loss': AverageMeter(),
                       'iou': AverageMeter(),
                       'dice': AverageMeter(),
@@ -258,7 +264,7 @@ class unet(base_model):
                 
                 loss = self.BceDiceLoss(preds, targets)
                 # iou, dice = iou_score(preds, targets)
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(preds, targets)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(preds, targets, epoch)
 
                 avg_meters['loss'].update(loss.item(), images.size(0))
                 avg_meters['iou'].update(iou, images.size(0))
@@ -328,7 +334,7 @@ class unet(base_model):
 
                 preds = self.network(images)
 
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(preds, targets)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
                 dice_avg_meter.update(dice, images.size(0))
                 hd_avg_meter.update(hd, images.size(0))
@@ -419,22 +425,6 @@ class unet(base_model):
 
 from medpy.metric.binary import jc, dc, hd, hd95, recall, specificity, precision, sensitivity
 
-# def iou_score(output, target):
-#     smooth = 1e-5
-
-#     if torch.is_tensor(output):
-#         output = torch.sigmoid(output).data.cpu().numpy()
-#     if torch.is_tensor(target):
-#         target = target.data.cpu().numpy()
-#     output_ = output > 0.5
-#     # target_ = target > 0.5
-#     # output_ = output
-#     target_ = target
-#     intersection = (output_ & target_).sum()
-#     union = (output_ | target_).sum()
-#     iou = (intersection + smooth) / (union + smooth)
-#     dice = (2* iou) / (iou+1)
-#     return iou, dice
 
 def iou_score(output, target):
     smooth = 1e-5
@@ -451,7 +441,31 @@ def iou_score(output, target):
     dice = (2* iou) / (iou+1)
     return iou, dice
     
-def indicators(output, target):
+def indicators(output, target, epoch):
+    if torch.is_tensor(output):
+        output = torch.sigmoid(output).data.cpu().numpy()
+    if torch.is_tensor(target):
+        target = target.data.cpu().numpy()
+    output_ = output > 0.5
+    target_ = target > 0.5
+    # target_ = target
+
+    iou_ = jc(output_, target_)
+    dice_ = dc(output_, target_)
+    if epoch >= 5:
+        hd_ = hd(output_, target_)
+        hd95_ = hd95(output_, target_)
+        recall_ = recall(output_, target_)
+        specificity_ = specificity(output_, target_)
+        precision_ = precision(output_, target_)
+        sensitivity_ = sensitivity(output_, target_)
+    else:
+        hd_, hd95_, recall_, specificity_, precision_, sensitivity_=0, 0, 0, 0, 0, 0
+
+    return iou_, dice_, hd_, hd95_, recall_, specificity_, precision_, sensitivity_
+
+
+def indicators_1(output, target):
     if torch.is_tensor(output):
         output = torch.sigmoid(output).data.cpu().numpy()
     if torch.is_tensor(target):
@@ -469,10 +483,8 @@ def indicators(output, target):
     precision_ = precision(output_, target_)
     sensitivity_ = sensitivity(output_, target_)
 
+
     return iou_, dice_, hd_, hd95_, recall_, specificity_, precision_, sensitivity_
-
-
-
 
 
 
