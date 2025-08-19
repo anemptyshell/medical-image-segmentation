@@ -16,7 +16,7 @@ class options:
         self.parser.add_argument("--save_interval", type=int, default=10)
         self.parser.add_argument("--val_interval", type=int, default=20)
 
-        self.parser.add_argument("--output", type=str, default="../output")
+        self.parser.add_argument("--output", type=str, default="../output_0818")
         self.parser.add_argument("--dataset", default="isic2017", help="Dataset name to use")
 
         ## optimizer
@@ -49,7 +49,8 @@ class options:
         self.parser.add_argument("--control_save_end",type=int,default=1,help="save the weights on terminal(default False)")
 
 
-        self.parser.add_argument("--data_path",type=str,default="../data",help="Dataset directory. Please refer Dataset in README.md",)
+        # self.parser.add_argument("--data_path",type=str,default="../data",help="Dataset directory. Please refer Dataset in README.md")
+        self.parser.add_argument("--data_path",type=str,default="/home/my/data",help="Dataset directory. Please refer Dataset in README.md")
         self.parser.add_argument("--gpu", default="0", type=str, help="GPU id to use.")
         self.parser.add_argument("--gpu_id", default='0', type=str, help="GPU id to use.")
 
