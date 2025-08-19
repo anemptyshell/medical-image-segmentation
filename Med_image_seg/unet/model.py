@@ -110,8 +110,8 @@ class unet(base_model):
             val_log, cldice= self.val_epoch(test_loader)
 
             ##########################################
-            print('loss %.4f - val_loss %.4f - val_iou %.4f - val_dice %.4f'
-              % (train_log['loss'], val_log['loss'], val_log['iou'], val_log['dice']))
+            print('epoch %d - loss %.4f - val_loss %.4f - val_iou %.4f - val_dice %.4f'
+              % (start_epoch, train_log['loss'], val_log['loss'], val_log['iou'], val_log['dice']))
   
             log['epoch'].append(epoch)
             log['loss'].append(train_log['loss'])
@@ -121,7 +121,8 @@ class unet(base_model):
             log['val_iou'].append(val_log['iou'])
             log['val_dice'].append(val_log['dice'])
 
-            pd.DataFrame(log).to_csv('res_log.csv', index=False)
+            log_file = os.path.join(self.args.log_dir, "res_log.csv")
+            pd.DataFrame(log).to_csv(log_file, index=False)
 
             ##########################################
 
