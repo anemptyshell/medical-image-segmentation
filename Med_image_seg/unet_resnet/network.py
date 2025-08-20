@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from Med_image_seg.fang1.model_util.resnet import resnet34
 
 
 class conv_block(nn.Module):
@@ -56,6 +57,8 @@ class U_Net_resnet(nn.Module):
         self.Up2 = up_conv(ch_in=128, ch_out=64)
         self.Up_conv2 = conv_block(ch_in=128, ch_out=64)
         self.Conv_1x1 = nn.Conv2d(64, output_ch, kernel_size=1, stride=1, padding=0)
+
+        self.backbone =resnet34(pretrained=True)
 
     def forward(self, x):
         ## x torch.Size([2, 3, 512, 512])
