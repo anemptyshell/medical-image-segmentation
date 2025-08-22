@@ -10,8 +10,8 @@ from libs.utils import AverageMeter
 from libs.base_model import base_model
 from collections import OrderedDict
 
-from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet2_res_ske.network import UNet2_resnet_skeleton
+from Med_image_seg.fang1.utils.loss import BceDiceLoss, soft_iou_loss
+from Med_image_seg.unet3_resnet_emi.network import UNet3_resnet_emi
 from Med_image_seg.fang.utils.cldice import clDice
 
 # from matplotlib import pyplot as plt
@@ -30,7 +30,7 @@ def arguments():
     return args
 
 
-class unet2_res_ske(base_model):
+class unet3_resnet_emi(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -53,7 +53,7 @@ class unet2_res_ske(base_model):
         """ Trainer """ 
         print('#----------Prepareing Model----------#')
 
-        self.network = UNet2_resnet_skeleton().to('cuda')
+        self.network = UNet3_resnet_emi().to('cuda')
         self.step = 0
         self.save_args()
   
@@ -63,6 +63,7 @@ class unet2_res_ske(base_model):
 
         """define loss"""
         self.BceDiceLoss = BceDiceLoss().cuda()
+        self.loss_iou = soft_iou_loss().cuda()
         """define optimizer"""
         self.optimizer = self.set_optimizer()
         """define lr_scheduler"""
@@ -198,12 +199,12 @@ class unet2_res_ske(base_model):
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             edge, skeleton = edge.cuda(non_blocking=True).float(), skeleton.cuda(non_blocking=True).float()
 
-            preds, pred_skeleton = self.network(images)
+            preds, pred_edge, pred_skeleton = self.network(images)
 
             loss1 = self.BceDiceLoss(preds, targets)
-            # loss2 = self.BceDiceLoss(pred_edge, edge)
-            loss2 = self.BceDiceLoss(pred_skeleton, skeleton)
-            loss = loss1 + 0.5 * loss2 #+ 0.5 * loss3
+            loss2 = self.BceDiceLoss(pred_edge, edge)
+            loss3 = self.BceDiceLoss(pred_skeleton, skeleton)
+            loss = loss1 + 0.5 * loss2 + 0.5 * loss3     
            
             iou, dice = iou_score(preds, targets)
             
@@ -264,7 +265,7 @@ class unet2_res_ske(base_model):
                 images, targets = data
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
-                preds, pred_skeleton = self.network(images)
+                preds, pred_edge, pred_skeleton = self.network(images)
                 
                 loss = self.BceDiceLoss(preds, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -336,7 +337,7 @@ class unet2_res_ske(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
 
-                preds, pred_skeleton = self.network(images)
+                preds, pred_edge, pred_skeleton = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))

@@ -161,32 +161,32 @@ class UNet2_resnet_skeleton(nn.Module):
 
         ## x torch.Size([2, 3, 512, 512])
         """encoder"""
-        # x1 = self.Conv1(x)     ## torch.Size([2, 64, 512, 512])
+        x1 = self.Conv1(x)     ## torch.Size([2, 64, 512, 512])
 
-        # x2 = self.Maxpool(x1)
-        # x2 = self.Conv2(x2)    ## torch.Size([2, 128, 256, 256])
+        x2 = self.Maxpool(x1)
+        x2 = self.Conv2(x2)    ## torch.Size([2, 128, 256, 256])
 
-        # x3 = self.Maxpool(x2)
-        # x3 = self.Conv3(x3)    ## torch.Size([2, 256, 128, 128])
+        x3 = self.Maxpool(x2)
+        x3 = self.Conv3(x3)    ## torch.Size([2, 256, 128, 128])
 
-        # x4 = self.Maxpool(x3)
-        # x4 = self.Conv4(x4)    ## torch.Size([2, 512, 64, 64])
+        x4 = self.Maxpool(x3)
+        x4 = self.Conv4(x4)    ## torch.Size([2, 512, 64, 64])
 
-        # x5 = self.Maxpool(x4)
-        # x5 = self.Conv5(x5)    ## torch.Size([2, 1024, 32, 32])
+        x5 = self.Maxpool(x4)
+        x5 = self.Conv5(x5)    ## torch.Size([2, 1024, 32, 32])
 
         ##--------------resnet----------------
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
+        # x = self.backbone.conv1(x)
+        # x = self.backbone.bn1(x)
+        # x = self.backbone.relu(x)
 
-        x1 = self.backbone.layer1(x)
-        x2 = self.backbone.layer2(x1) 
-        x3 = self.backbone.layer3(x2) 
-        x4 = self.backbone.layer4(x3)
+        # x1 = self.backbone.layer1(x)
+        # x2 = self.backbone.layer2(x1) 
+        # x3 = self.backbone.layer3(x2) 
+        # x4 = self.backbone.layer4(x3)
 
-        x5 = self.backbone.maxpool(x4)
-        x5 = self.Conv5(x5) 
+        # x5 = self.backbone.maxpool(x4)
+        # x5 = self.Conv5(x5) 
         ##------------------------------------
        
         """decoder"""

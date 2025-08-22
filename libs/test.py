@@ -111,6 +111,54 @@ def generate_custom_skeleton_efficient(binary_image, a=3):
 
 
 
+def generate_custom_skeleton_2(binary_image, a=1):
+    """
+    生成自定义宽度的血管骨架图
+    参数：
+    binary_image: 二值化血管图像 (H, W)，前景（血管）为1，背景为0
+    a: 半径阈值（像素）
+    返回：
+    edt: 欧氏距离变换图
+    adjusted_radius: 调整后的半径图
+    skeleton: 骨架图
+    custom_skeleton: 自定义宽度骨架图 (H, W)
+    """
+    # 步骤1: 计算欧氏距离变换 (EDT)
+    edt = distance_transform_edt(binary_image)
+    
+    # 步骤2: 提取骨架（中心线）
+    skeleton = skeletonize(binary_image)
+    
+    # 步骤3: 获取骨架点处的半径值
+    skeleton_radius = np.where(skeleton, edt, 0)
+    
+    # 步骤4: 应用阈值a，限制最大半径
+    adjusted_radius = np.minimum(skeleton_radius, a)
+    
+    # 步骤5: 生成自定义宽度骨架
+    custom_skeleton = np.zeros_like(binary_image, dtype=bool)
+    max_radius = int(np.ceil(a))
+    
+    # 为每个可能的半径值创建膨胀
+    for r in range(1, max_radius + 1):
+        # 获取需要以半径r膨胀的骨架点
+        current_points = (adjusted_radius >= r) & (skeleton)
+        
+        # 使用当前半径进行膨胀
+        current_disk = disk(r)
+        dilated = dilation(current_points, footprint=current_disk)
+        
+        # 叠加到结果
+        custom_skeleton |= dilated
+    
+    return edt, adjusted_radius, skeleton, custom_skeleton
+
+
+
+
+
+
+
 image_path = "21.png"
 
 cap = cv2.VideoCapture(image_path)
@@ -131,8 +179,8 @@ img[img > 100] = 1
 # custom_skel = generate_custom_skeleton_efficient(binary_image, a=3)
 
 # 调整阈值a观察效果
-for a in [1]:
-    edt, adjusted_radius, skeleton, custom_skeleton = generate_custom_skeleton(img, a=a)
-    plt.imshow(edt, cmap='gray')
+for a in [1,2,10]:
+    edt, adjusted_radius, skeleton, custom_skeleton = generate_custom_skeleton_2(img, a=a)
+    plt.imshow(custom_skeleton, cmap='gray')
     plt.title(f'Custom Skeleton (a={a})')
     plt.show()
