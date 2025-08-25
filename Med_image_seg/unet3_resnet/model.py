@@ -26,9 +26,6 @@ from scipy.ndimage import distance_transform_edt
 
 def arguments():
     args = {
-
-    # '--betas': (0.9, 0.999), # default: (0.9, 0.999) – coefficients used for computing running averages of gradient and its square 用于计算梯度及其平方的运行平均值的系数
-    # '--T_max': 50, # – Maximum number of iterations. Cosine function period.
 }  
     return args
 
