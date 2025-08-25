@@ -77,7 +77,7 @@ cd ~/mis-ft/medical-image-segmentation
 # python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name unet_resnet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
 
 
-# python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet3_resnet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
+python main.py --dataset CHASE_DB1 --epochs 2 --phase train --img_size 256 --model_name unet3_resnet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
 # python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name unet3_resnet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
 # python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name unet3_resnet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
 
@@ -103,6 +103,6 @@ cd ~/mis-ft/medical-image-segmentation
 # python main.py --dataset STARE --epochs 200 --phase train --img_size 256 --model_name unet2_ske --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
 
 
-python main.py --dataset CHASE_DB1 --epochs 200 --phase train --img_size 256 --model_name unet2_edge --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
-python main.py --dataset DRIVE --epochs 200 --phase train --img_size 256 --model_name unet2_edge --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
-python main.py --dataset STARE --epochs 200 --phase train --img_size 256 --model_name unet2_edge --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
+# python main.py --dataset CHASE_DB1 --epochs 200 --phase train --img_size 256 --model_name unet2_edge --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
+# python main.py --dataset DRIVE --epochs 200 --phase train --img_size 256 --model_name unet2_edge --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
+# python main.py --dataset STARE --epochs 200 --phase train --img_size 256 --model_name unet2_edge --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1

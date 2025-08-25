@@ -3,6 +3,7 @@ from skimage.morphology import skeletonize
 from scipy.ndimage import distance_transform_edt
 import matplotlib.pyplot as plt
 import cv2
+import torch
 
 def generate_custom_skeleton(binary_image, a=1):
     """
@@ -54,9 +55,7 @@ def generate_custom_skeleton(binary_image, a=1):
 
 # 更高效的版本（使用向量化操作）
 def generate_custom_skeleton_efficient(binary_image, a=1):
-    """
-    高效版本：使用向量化操作生成自定义宽度的血管骨架图
-    """
+
     # 计算距离变换和骨架
     edt = distance_transform_edt(binary_image)
     skeleton = skeletonize(binary_image)
@@ -84,22 +83,21 @@ def generate_custom_skeleton_efficient(binary_image, a=1):
     
     return edt, skeleton, custom_skeleton
 
-# 使用示例
+
+
 # image_path = "21.png"
-# img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-# if img is None:
-#     raise ValueError(f"无法读取图像: {image_path}")
+# cap = cv2.VideoCapture(image_path)
+# ret, img = cap.read()
+# cap.release()
+# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# img = img.astype(np.uint8)
 
-image_path = "21.png"
+# # 二值化图像
+# _, binary_img = cv2.threshold(img, 0.5, 1, cv2.THRESH_BINARY)
 
-cap = cv2.VideoCapture(image_path)
-ret, img = cap.read()
-cap.release()
-img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-img = img.astype(np.uint8)
 
-# 二值化图像
-_, binary_img = cv2.threshold(img, 100, 1, cv2.THRESH_BINARY)
+binary_img = torch.randint(0, 2, (256, 256), dtype=torch.float32)
+binary_img = binary_img.numpy().astype(np.uint8)
 
 # 测试不同a值
 a_values = [1, 2, 3, 4]
