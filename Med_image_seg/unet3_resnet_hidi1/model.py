@@ -10,8 +10,8 @@ from libs.utils import AverageMeter
 from libs.base_model import base_model
 from collections import OrderedDict
 
-from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet3_resnet.network import UNet3_resnet, Multi_decoder_Net
+from Med_image_seg.fang1.utils.loss import BceDiceLoss, soft_iou_loss
+from Med_image_seg.unet3_resnet_hidi1.network import UNet3_resnet_hidi, Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 # from matplotlib import pyplot as plt
@@ -19,18 +19,18 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from skimage.morphology import skeletonize
-from scipy.ndimage import distance_transform_edt
-
 
 
 def arguments():
     args = {
+
+    # '--betas': (0.9, 0.999), # default: (0.9, 0.999) – coefficients used for computing running averages of gradient and its square 用于计算梯度及其平方的运行平均值的系数
+    # '--T_max': 50, # – Maximum number of iterations. Cosine function period.
 }  
     return args
 
 
-class unet3_resnet(base_model):
+class unet3_resnet_hidi1(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -53,8 +53,8 @@ class unet3_resnet(base_model):
         """ Trainer """ 
         print('#----------Prepareing Model----------#')
 
-        self.network = UNet3_resnet().to('cuda')
-        # self.network = Multi_decoder_Net(3).to('cuda')
+        # self.network = UNet3_resnet_hidi().to('cuda')
+        self.network = Multi_decoder_Net(3).to('cuda')
         self.step = 0
         self.save_args()
   
@@ -64,6 +64,7 @@ class unet3_resnet(base_model):
 
         """define loss"""
         self.BceDiceLoss = BceDiceLoss().cuda()
+        self.loss_iou = soft_iou_loss().cuda()
         """define optimizer"""
         self.optimizer = self.set_optimizer()
         """define lr_scheduler"""
@@ -76,38 +77,6 @@ class unet3_resnet(base_model):
         csv1 = 'test_results'+'.csv'
         with open(os.path.join(self.args.log_dir, csv1), 'w') as f:
             f.write('dice, Jac, clDice, acc, sen, spe, pre, recall, f1 \n')
-
-    def generate_custom_skeleton_efficient(self, binary_image, a=1):
-
-        if binary_image.ndim > 2:
-            binary_image = binary_image.squeeze()  # 移除所有单维度
-
-        # 计算距离变换和骨架
-        edt = distance_transform_edt(binary_image)
-        skeleton = skeletonize(binary_image)
-        
-        # 获取骨架点处的距离值并应用阈值
-        skeleton_distances = np.where(skeleton, edt, 0)
-        adjusted_distances = np.minimum(skeleton_distances, a)
-        
-        # 创建坐标网格
-        y_coords, x_coords = np.where(skeleton)
-        distances = adjusted_distances[skeleton]
-        
-        # 为所有骨架点创建影响区域
-        custom_skeleton = np.zeros_like(binary_image, dtype=bool)
-        
-        # 使用广播计算所有点到所有骨架点的距离
-        y_grid, x_grid = np.indices(binary_image.shape)
-        
-        for y, x, max_dist in zip(y_coords, x_coords, distances):
-            if max_dist > 0:
-                # 计算当前点到所有其他点的距离
-                dist_to_point = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
-                # 标记在影响范围内的点
-                custom_skeleton = np.logical_or(custom_skeleton, dist_to_point <= max_dist)
-        
-        return custom_skeleton
 
 
     def train(self, train_loader, test_loader):
@@ -230,25 +199,19 @@ class unet3_resnet(base_model):
             images, targets, edge, skeleton = data
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             edge, skeleton = edge.cuda(non_blocking=True).float(), skeleton.cuda(non_blocking=True).float()
-            # edge = edge.cuda(non_blocking=True).float()
-            preds, pred_edge, pred_skeleton = self.network(images)
 
-            # skeleton_np = skeleton.numpy().astype(np.uint8)
-            # custom_skeletons = []
-            # for i in range(skeleton_np.shape[0]):  
-            #     single_skeleton = skeleton_np[i].squeeze(0)
-            #     custom_skel = self.generate_custom_skeleton_efficient(single_skeleton)
-            #     custom_skel_tensor = torch.from_numpy(custom_skel.astype(np.float32)).unsqueeze(0)
-            #     custom_skeletons.append(custom_skel_tensor)
-            # custom_skeleton = torch.stack(custom_skeletons).cuda(non_blocking=True)
+            pred_raw, pred_edge, pred_skeleton, preds = self.network(images)
 
-            loss1 = self.BceDiceLoss(preds, targets)
+            loss1 = self.loss_iou(preds, targets)
             loss2 = self.BceDiceLoss(pred_edge, edge)
             loss3 = self.BceDiceLoss(pred_skeleton, skeleton)
-            loss = loss1 + 0.5 * loss2 + 0.5 * loss3
+            loss4 = self.BceDiceLoss(pred_raw, targets)
+            # loss = loss1 + 0.33*loss2 + 0.33*loss3 + 0.33*loss4    
+            loss = loss1 + 0.33*loss2 + 0.33*loss3 + 0.33*loss4       
            
             iou, dice = iou_score(preds, targets)
-
+            
+            ## compute gradient and do optimizing step
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -270,7 +233,9 @@ class unet3_resnet(base_model):
             # iter_num = iter_num + 1     
             pbar.set_postfix(postfix)
             pbar.update(1)
-
+           
+            # if iter % self.args.print_interval == 0:
+            #     self.save_print_loss_lr(iter, epoch, loss_list, now_lr)
 
         pbar.close()
         self.lr_scheduler.step()
@@ -303,9 +268,9 @@ class unet3_resnet(base_model):
                 images, targets = data
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
-                preds, pred_edge, pred_skeleton = self.network(images)
+                pred_raw, pred_edge, pred_skeleton, preds = self.network(images)
                 
-                loss = self.BceDiceLoss(preds, targets)
+                loss = self.loss_iou(preds, targets)
                 # iou, dice = iou_score(preds, targets)
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(preds, targets, epoch)
 
@@ -375,7 +340,7 @@ class unet3_resnet(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
 
-                preds, pred_edge, pred_skeleton = self.network(images)
+                pred_raw, pred_edge, pred_skeleton, preds = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))

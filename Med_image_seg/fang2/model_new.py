@@ -10,27 +10,27 @@ from libs.utils import AverageMeter
 from libs.base_model import base_model
 from collections import OrderedDict
 
-from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet3_resnet.network import UNet3_resnet, Multi_decoder_Net
+from Med_image_seg.fang1.utils.loss import BceDiceLoss, soft_iou_loss 
 from Med_image_seg.fang.utils.cldice import clDice
+from Med_image_seg.fang1.network import UNet_3de_emi_hidi
 
 # from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+import cv2
 from matplotlib import pyplot as plt
-
-from skimage.morphology import skeletonize
-from scipy.ndimage import distance_transform_edt
 
 
 
 def arguments():
     args = {
+    '--lr_update': 'step',
+    '--lr_step': 12
 }  
     return args
 
 
-class unet3_resnet(base_model):
+class fang2(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -48,13 +48,11 @@ class unet3_resnet(base_model):
         self.set_cuda()
         torch.cuda.empty_cache()
 
-
         ######################################################################################
         """ Trainer """ 
         print('#----------Prepareing Model----------#')
 
-        self.network = UNet3_resnet().to('cuda')
-        # self.network = Multi_decoder_Net(3).to('cuda')
+        self.network = UNet_3de_emi_hidi().to('cuda')
         self.step = 0
         self.save_args()
   
@@ -64,6 +62,7 @@ class unet3_resnet(base_model):
 
         """define loss"""
         self.BceDiceLoss = BceDiceLoss().cuda()
+        self.loss_iou = soft_iou_loss().cuda()
         """define optimizer"""
         self.optimizer = self.set_optimizer()
         """define lr_scheduler"""
@@ -76,38 +75,6 @@ class unet3_resnet(base_model):
         csv1 = 'test_results'+'.csv'
         with open(os.path.join(self.args.log_dir, csv1), 'w') as f:
             f.write('dice, Jac, clDice, acc, sen, spe, pre, recall, f1 \n')
-
-    def generate_custom_skeleton_efficient(self, binary_image, a=1):
-
-        if binary_image.ndim > 2:
-            binary_image = binary_image.squeeze()  # 移除所有单维度
-
-        # 计算距离变换和骨架
-        edt = distance_transform_edt(binary_image)
-        skeleton = skeletonize(binary_image)
-        
-        # 获取骨架点处的距离值并应用阈值
-        skeleton_distances = np.where(skeleton, edt, 0)
-        adjusted_distances = np.minimum(skeleton_distances, a)
-        
-        # 创建坐标网格
-        y_coords, x_coords = np.where(skeleton)
-        distances = adjusted_distances[skeleton]
-        
-        # 为所有骨架点创建影响区域
-        custom_skeleton = np.zeros_like(binary_image, dtype=bool)
-        
-        # 使用广播计算所有点到所有骨架点的距离
-        y_grid, x_grid = np.indices(binary_image.shape)
-        
-        for y, x, max_dist in zip(y_coords, x_coords, distances):
-            if max_dist > 0:
-                # 计算当前点到所有其他点的距离
-                dist_to_point = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
-                # 标记在影响范围内的点
-                custom_skeleton = np.logical_or(custom_skeleton, dist_to_point <= max_dist)
-        
-        return custom_skeleton
 
 
     def train(self, train_loader, test_loader):
@@ -230,25 +197,18 @@ class unet3_resnet(base_model):
             images, targets, edge, skeleton = data
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             edge, skeleton = edge.cuda(non_blocking=True).float(), skeleton.cuda(non_blocking=True).float()
-            # edge = edge.cuda(non_blocking=True).float()
-            preds, pred_edge, pred_skeleton = self.network(images)
 
-            # skeleton_np = skeleton.numpy().astype(np.uint8)
-            # custom_skeletons = []
-            # for i in range(skeleton_np.shape[0]):  
-            #     single_skeleton = skeleton_np[i].squeeze(0)
-            #     custom_skel = self.generate_custom_skeleton_efficient(single_skeleton)
-            #     custom_skel_tensor = torch.from_numpy(custom_skel.astype(np.float32)).unsqueeze(0)
-            #     custom_skeletons.append(custom_skel_tensor)
-            # custom_skeleton = torch.stack(custom_skeletons).cuda(non_blocking=True)
+            """for edge or skeleton"""
+            preds, pred_edge = self.network(images)
+            # preds, pred_skeleton = self.network(images)
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_edge, edge)
-            loss3 = self.BceDiceLoss(pred_skeleton, skeleton)
-            loss = loss1 + 0.5 * loss2 + 0.5 * loss3
-           
-            iou, dice = iou_score(preds, targets)
+            loss = 0.5*loss1 + 0.5*loss2
 
+            iou, dice = iou_score(preds, targets)
+            
+            ## compute gradient and do optimizing step
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -270,7 +230,9 @@ class unet3_resnet(base_model):
             # iter_num = iter_num + 1     
             pbar.set_postfix(postfix)
             pbar.update(1)
-
+           
+            # if iter % self.args.print_interval == 0:
+            #     self.save_print_loss_lr(iter, epoch, loss_list, now_lr)
 
         pbar.close()
         self.lr_scheduler.step()
@@ -303,7 +265,7 @@ class unet3_resnet(base_model):
                 images, targets = data
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
-                preds, pred_edge, pred_skeleton = self.network(images)
+                preds = self.network(images) 
                 
                 loss = self.BceDiceLoss(preds, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -375,7 +337,7 @@ class unet3_resnet(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
 
-                preds, pred_edge, pred_skeleton = self.network(images)
+                preds = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
@@ -561,186 +523,6 @@ def safe_hd95(result, reference, voxelspacing=None, connectivity=1):
     except RuntimeError:
         # 捕获其他可能的运行时错误
         return np.nan
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # def test_one_epoch(self, test_loader):
-    #     self.network.eval()
-    #     loss_sum = 0
-    #     dice_sum, iou_sum = 0.0, 0.0
-    #     pred = []
-    #     gts = []
-    #     # loss_list = []
-    #     threshold = 0.5
-
-
-    #     with torch.no_grad():
-    #         for iter, data in enumerate(tqdm(test_loader)):
-    #             images, targets = data
-    #             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
-    #             # print(images.size())  ## torch.Size([1, 3, 256, 256])
-    #             # print(targets.size())  ## torch.Size([1, 1, 256, 256])
-    #             # print(images.dtype)   ## torch.float32
-
-    #             # images, targets = images.to(self.device), targets.to(self.device)
-
-    #             preds = self.network(images)
-    #             loss = self.BceDiceLoss(preds, targets) 
-
-    #             iou,dice = iou_score(preds, targets)  
-    #             loss_sum += len(images) * loss
-    #             iou_sum += len(images) * iou
-    #             dice_sum += len(images) * dice
-
-    #             if iter == len(test_loader):
-    #                 loss_avg = loss_sum / (self.args.batch_size*(iter-1) + len(images))
-                
-    #                 iou_avg = iou_sum / (self.args.batch_size*(iter-1) + len(images))
-    #                 dice_avg = dice_sum / (self.args.batch_size*(iter-1) + len(images))
-    #             else:
-    #                 loss_avg = loss_sum / (iter * self.args.batch_size)
-    #                 iou_avg = iou_sum / (iter * self.args.batch_size)                
-    #                 dice_avg = dice_sum / (iter * self.args.batch_size)            
-
-    #             # loss_list.append(loss.item())
-
-    #             targets = targets.squeeze(1).cpu().detach().numpy()
-    #             # print(targets.shape)   # (1, 256, 256)
-    #             # print('*'*10)
-    
-    #             gts.append(targets)
-    #             if type(preds) is tuple:
-    #                 preds = preds[0]
-
-    #             preds = preds.squeeze(1).cpu().detach().numpy()
-    #             # print(preds.shape)  # (1, 256, 256)
-    #             # print('*'*10)
-
-    #             images = images.squeeze(0).permute(1,2,0).detach().cpu().numpy()
-    #             images = images / 255. if images.max() > 1.1 else images
-    #             # print(images.shape)  # (256, 256, 3)
-    #             # print('*'*10)
-
-    #             pred.append(preds) 
-
-    #             save_path = self.args.res_dir
-    #             if iter % self.args.save_interval == 0:
-    #                 save_imgs(images, targets, preds, iter, save_path, self.args.dataset)
-
-
-    #         pred = np.array(pred).reshape(-1)
-    #         gts = np.array(gts).reshape(-1)
-
-    #         y_pre = np.where(pred >= threshold, 1, 0)
-    #         y_true = np.where(gts>=0.5, 1, 0)
-
-    #         confusion, accuracy, sensitivity, specificity, dsc, miou, precision, recall, f1_score = get_metric(y_pre, y_true)
-
-    #         # 添加loss: {np.mean(loss_list):.4f},
-    #         log_info_1 = f'test of best model, mIoU: {miou}, DSC: {dsc}, acc: {accuracy}, spe: {specificity}, sen_or_recall: {sensitivity}, precision: {precision}, \
-    #                        F1_score: {f1_score}, confusion_matrix: {confusion}'
-    #         log_info = f'test of best model, IoU: {iou}, IoU_avg: {iou_avg}, Dice: {dice}, Dice_avg: {dice_avg}'
-    #         print(log_info_1)
-    #         print(log_info)
-    #         self.logger.info(log_info_1)
-    #         self.logger.info(log_info)
-
-    #     # return np.mean(loss_list)
-    #     return loss_avg
-
- 
-    # def val_one_epoch(self, test_loader, epoch):
-    #     # switch to evaluate mode
-    #     self.network.eval()
-    #     loss_sum = 0
-    #     dice_sum, iou_sum = 0.0, 0.0
-    #     pred = []
-    #     gts = []
-    #     loss_list = []
-    #     threshold = 0.5
-
-    #     with torch.no_grad():
-    #         # for data in tqdm(test_loader):
-    #         for iter, data in enumerate(test_loader):
-    #             images, targets = data
-    #             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
-    #             # img, msk = img.to(self.device), msk.to(self.device)
-
-    #             preds = self.network(images)
-    #             loss = self.BceDiceLoss(preds, targets)
-
-    #             iou, dice = iou_score(preds, targets)
-    #             loss_sum += len(images) * loss
-    #             iou_sum += len(images) * iou
-    #             dice_sum += len(images) * dice
-
-    #             if iter == len(test_loader):
-    #                 loss_avg = loss_sum / (self.args.batch_size*(iter-1) + len(images))
-                
-    #                 iou_avg = iou_sum / (self.args.batch_size*(iter-1) + len(images))
-    #                 dice_avg = dice_sum / (self.args.batch_size*(iter-1) + len(images))
-    #             else:
-    #                 loss_avg = loss_sum / (iter * self.args.batch_size)
-    #                 iou_avg = iou_sum / (iter * self.args.batch_size)                
-    #                 dice_avg = dice_sum / (iter * self.args.batch_size)
-
-
-    #             loss_list.append(loss.item())
-    #             gts.append(targets.squeeze(1).cpu().detach().numpy())
-
-    #             if type(preds) is tuple:
-    #                 preds = preds[0]
-    #             preds = preds.squeeze(1).cpu().detach().numpy()
-
-    #             pred.append(preds) 
-
-    #     if epoch % self.args.val_interval == 0:
-    #         pred = np.array(pred).reshape(-1)   ## 展成一维数组
-    #         gts = np.array(gts).reshape(-1)
-
-    #         y_pre = np.where(pred >= threshold, 1, 0)
-    #         y_true = np.where(gts>=0.5, 1, 0)
-
-    #         confusion, accuracy, sensitivity, specificity, dsc, miou, precision, recall, f1_score = get_metric(y_pre, y_true)
-
-    #         log_info_1 = f'val epoch: {epoch}, mIoU: {miou:.4f}, DSC: {dsc:.4f}, acc: {accuracy:.4f}, \
-    #                     spe: {specificity:.4f}, sen_or_recall: {sensitivity:.4f}, precision: {precision:.4f}, F1_score: {f1_score:.4f}, confusion_matrix: {confusion}'
-            
-    #         # log_info = f'val epoch: {epoch}, loss: {loss:.4f}, loss_avg: {loss_avg:.4f}, IoU: {iou}, IoU_avg: {iou_avg}, Dice: {dice}, Dice_avg: {dice_avg}'
-    #         log_info = f'val epoch: {epoch}, IoU: {iou}, IoU_avg: {iou_avg}, Dice: {dice}, Dice_avg: {dice_avg}'
-    #         print(log_info_1)
-    #         print(log_info)
-    #         self.logger.info(log_info_1)
-    #         self.logger.info(log_info)
-
-    #     else:
-    #         pred = np.array(pred).reshape(-1)   ## 展成一维数组
-    #         gts = np.array(gts).reshape(-1)
-
-    #         y_pre = np.where(pred >= threshold, 1, 0)
-    #         y_true = np.where(gts>=0.5, 1, 0)
-
-    #         dsc = get_dsc(y_pre, y_true)
-
-    #         log_info = f'val epoch: {epoch}, loss_avg: {loss_avg:.4f}, loss: {np.mean(loss_list):.4f}'
-    #         print(log_info)
-    #         self.logger.info(log_info)
-   
-    #     return np.mean(loss_list), dsc
 
 
 

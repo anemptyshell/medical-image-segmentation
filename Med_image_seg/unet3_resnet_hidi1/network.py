@@ -1,13 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from Med_image_seg.fang1.model_util.resnet import resnet34
+# from Med_image_seg.fang1.model_util.resnet import resnet34
 # from model_util.resnet import resnet34
 from torch.nn import init
 import logging
-import os
-
-
 BatchNorm2d = nn.BatchNorm2d
 relu_inplace = True
 
@@ -56,8 +53,72 @@ def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=dilation, groups=groups, bias=False, dilation=dilation)
 
 
+class Down(nn.Module):
+    """Downscaling with maxpool then double conv"""
 
-"""HIDI""" """from ISAANet"""
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.maxpool_conv = nn.Sequential(
+            nn.MaxPool2d(2),
+            DoubleConv(in_channels, out_channels)
+        )
+
+    def forward(self, x):
+        return self.maxpool_conv(x)
+
+
+class Up(nn.Module):
+    """Upscaling then double conv"""
+
+    def __init__(self, in_channels, out_channels, bilinear=False):
+        super().__init__()
+
+        # if bilinear, use the normal convolutions to reduce the number of channels
+        if bilinear:
+            self.up = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+                nn.Conv2d(in_channels, in_channels // 2, kernel_size=(1, 1), stride=1)
+            )
+
+        else:
+            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
+
+        self.conv = DoubleConv(in_channels, out_channels)
+
+    def forward(self, x1, x2):
+        x1 = self.up(x1)
+
+        cat_x = torch.cat((x1, x2), 1)
+        output = self.conv(cat_x)
+        return output
+
+
+class DoubleConv(nn.Module):
+    """(convolution => [BN] => ReLU) * 2"""
+
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.double_conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.double_conv(x)
+
+
+class OutConv(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(OutConv, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+        return self.conv(x)
+
 class Fusion(nn.Module):
     def __init__(self, channel, ratio):
         super().__init__()
@@ -138,9 +199,8 @@ class Fusion(nn.Module):
         # print(out.size())
         return out
 
-
 logging.basicConfig(
-    filename='fusion_max_indices.log',
+    filename='/home/my/mis-ft/medical-image-segmentation/fusion_max_indices.log',
     level=logging.INFO,
     format='%(asctime)s - %(message)s',
     filemode='a'
@@ -169,6 +229,7 @@ class Fusion1(nn.Module):
 
 
     def forward(self, x, y, z):
+        self.forward_count += 1
 
         xy = self.conv1(torch.cat((x, y), 1))
         yz = self.conv1(torch.cat((y, z), 1))
@@ -178,53 +239,37 @@ class Fusion1(nn.Module):
         xy2 = yz
         xy3 = xz
     
-        # # 创建堆叠的张量以便找到最大值索引
-        # stacked = torch.stack([xy1, xy2, xy3], dim=0)  # [3, batch, channel, H, W]
+        # 创建堆叠的张量以便找到最大值索引
+        stacked = torch.stack([xy1, xy2, xy3], dim=0)  # [3, batch, channel, H, W]
         
-        # # 找到最大值和对应的索引
-        # max_vals, max_indices = torch.max(stacked, dim=0)
+        # 找到最大值和对应的索引
+        max_vals, max_indices = torch.max(stacked, dim=0)
 
-        # # 0: 来自 xy1
-        # # 1: 来自 xy2  
-        # # 2: 来自 xy3
+        # 0: 来自 xy1
+        # 1: 来自 xy2  
+        # 2: 来自 xy3
         
-        # total_pixels = max_indices.numel()
-        # count_xy1 = (max_indices == 0).sum().item()
-        # count_xy2 = (max_indices == 1).sum().item()
-        # count_xy3 = (max_indices == 2).sum().item()
-
-        # 使用原逻辑但记录来源
-        result1 = torch.where(xy1 > xy2, xy1, xy2)
-        source1 = torch.where(xy1 > xy2, torch.zeros_like(xy1), torch.ones_like(xy2))  # 0:xy1, 1:xy2
-        
-        resultk = torch.where(result1 > xy3, result1, xy3)
-        source_final = torch.where(result1 > xy3, source1, 2 * torch.ones_like(xy3))  # 0:xy1, 1:xy2, 2:xy3
-        
-        # 统计最终来源
-        count_xy1 = (source_final == 0).sum().item()
-        count_xy2 = (source_final == 1).sum().item()
-        count_xy3 = (source_final == 2).sum().item()
-        logging.info(f"Forward pass {self.forward_count}:")
-        logging.info(f"  来自 xy1 的像素数: {count_xy1} ")
-        logging.info(f"  来自 xy2 的像素数: {count_xy2} ")
-        logging.info(f"  来自 xy3 的像素数: {count_xy3} ")
+        total_pixels = max_indices.numel()
+        count_xy1 = (max_indices == 0).sum().item()
+        count_xy2 = (max_indices == 1).sum().item()
+        count_xy3 = (max_indices == 2).sum().item()
             
         # 计算百分比
-        # perc_xy1 = count_xy1 / total_pixels * 100
-        # perc_xy2 = count_xy2 / total_pixels * 100
-        # perc_xy3 = count_xy3 / total_pixels * 100
+        perc_xy1 = count_xy1 / total_pixels * 100
+        perc_xy2 = count_xy2 / total_pixels * 100
+        perc_xy3 = count_xy3 / total_pixels * 100
         
         # 保存到日志
-        # logging.info(f"Forward pass {self.forward_count}:")
-        # logging.info(f"  来自 xy1 的像素数: {count_xy1} ({perc_xy1:.2f}%)")
-        # logging.info(f"  来自 xy2 的像素数: {count_xy2} ({perc_xy2:.2f}%)")
-        # logging.info(f"  来自 xy3 的像素数: {count_xy3} ({perc_xy3:.2f}%)")
-        # logging.info(f"  总像素数: {total_pixels}")
+        logging.info(f"Forward pass {self.forward_count}:")
+        logging.info(f"  来自 xy1 的像素数: {count_xy1} ({perc_xy1:.2f}%)")
+        logging.info(f"  来自 xy2 的像素数: {count_xy2} ({perc_xy2:.2f}%)")
+        logging.info(f"  来自 xy3 的像素数: {count_xy3} ({perc_xy3:.2f}%)")
+        logging.info(f"  总像素数: {total_pixels}")
         
         # 同时在控制台输出（可选）
         # print(f"Forward {self.forward_count}: xy1={perc_xy1:.1f}%, xy2={perc_xy2:.1f}%, xy3={perc_xy3:.1f}%")
         
-        # resultk = max_vals  
+        resultk = max_vals  
 
         y_view = y.view(y.shape[0], y.shape[1], -1)
         resultk_view = resultk.view(resultk.shape[0], resultk.shape[1], -1)
@@ -264,6 +309,17 @@ class Fusion2(nn.Module):
     def forward(self, x, y, z):
         self.forward_count += 1
 
+        # 打印三个特征图的统计信息
+        print(f"x - shape: {x.shape}")
+        print(f"x - min: {x.min().item():.4f}, max: {x.max().item():.4f}, mean: {x.mean().item():.4f}")
+        print(f"y - min: {y.min().item():.4f}, max: {y.max().item():.4f}, mean: {y.mean().item():.4f}")
+        print(f"z - min: {z.min().item():.4f}, max: {z.max().item():.4f}, mean: {z.mean().item():.4f}")
+        
+        # 还可以打印前几个值看看
+        print(f"x前10个值: {x.flatten()[:10]}")
+        print(f"y前10个值: {y.flatten()[:10]}")
+        print(f"z前10个值: {z.flatten()[:10]}")
+
         # 融合特征
         xy = self.conv1(torch.cat((x, y), 1))
         yz = self.conv1(torch.cat((y, z), 1))
@@ -272,6 +328,17 @@ class Fusion2(nn.Module):
         xy1 = xy
         xy2 = yz
         xy3 = xz
+
+        # 打印三个特征图的统计信息
+        print(f"xy1 - shape: {xy1.shape}")
+        print(f"xy1 - min: {xy1.min().item():.4f}, max: {xy1.max().item():.4f}, mean: {xy1.mean().item():.4f}")
+        print(f"xy2 - min: {xy2.min().item():.4f}, max: {xy2.max().item():.4f}, mean: {xy2.mean().item():.4f}")
+        print(f"xy3 - min: {xy3.min().item():.4f}, max: {xy3.max().item():.4f}, mean: {xy3.mean().item():.4f}")
+        
+        # 还可以打印前几个值看看
+        print(f"xy1前10个值: {xy1.flatten()[:10]}")
+        print(f"xy2前10个值: {xy2.flatten()[:10]}")
+        print(f"xy3前10个值: {xy3.flatten()[:10]}")
 
         # 最大值选择并记录来源
         result1 = torch.where(xy1 > xy2, xy1, xy2)
@@ -336,160 +403,11 @@ class Fusion2(nn.Module):
 
 
 
-class CBR(nn.Module):
-    def __init__(self, in_c, out_c, kernel_size=3, padding=1, dilation=1, stride=1, act=True):
-        super().__init__()
-        self.act = act
 
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size, padding=padding, dilation=dilation, bias=False, stride=stride),
-
-            nn.BatchNorm2d(out_c)
-        )
-        self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        x = self.conv(x)
-        if self.act == True:
-            x = self.relu(x)
-        return x
-
-class Mine(nn.Module):
-    """
-    definition of MINE
-    """
-
-    def __init__(self, input_size, hidden_size=200):
-        super().__init__()
-        self.input_size = input_size
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, 1)
-
-    def forward(self, x):
-        output = self.fc1(x)
-        output = F.relu(output)
-        output = self.fc2(output)
-        output = F.relu(output)
-        output = self.fc3(output)
-        return output
-
-class selective_feature_decoupler(nn.Module):
-    """
-    definition of SFD
-    """
-
-    def __init__(self, in_c, out_c, in_h, in_w):
-        super().__init__()
-        self.in_c = in_c
-        self.out_c = out_c
-        self.in_h = in_h
-        self.in_w = in_w
-
-        # 3*3CBR 2
-        self.c1 = nn.Sequential(
-            CBR(in_c, in_c, kernel_size=3, padding=1),
-            CBR(in_c, out_c, kernel_size=3, padding=1)
-        )
-        # 3*3CBR 2
-        self.c2 = nn.Sequential(
-            CBR(in_c, in_c, kernel_size=3, padding=1),
-            CBR(in_c, out_c, kernel_size=3, padding=1)
-        )
-
-        # before MINE, reduce channel and size
-        self.reduce_c = nn.Sequential(
-            CBR(out_c, 16, kernel_size=1, padding=0),
-            nn.MaxPool2d(2, stride=2)
-        )
-
-        # init MINE
-        self.mine_net = Mine(input_size=16 * (in_h // 2) * (in_w // 2) * 2)
-        # self.mine_net = Mine(input_size=524288)
-
-    def mutual_information(self, joint, marginal):
-        # joint = joint.float().cuda() if torch.cuda.is_available() else joint.float()
-        # marginal = marginal.float().cuda() if torch.cuda.is_available() else marginal.float()
-        joint = joint.float() 
-        marginal = marginal.float() 
-        # print('******************')
-        # print(joint.size())     ## [2, 524288]
-
-        t = self.mine_net(joint)
-        et = torch.exp(self.mine_net(marginal))
-        mi_lb = torch.mean(t) - torch.log(1 + torch.mean(et))
-
-        return mi_lb
-
-    def forward(self, x):
-        # x:[B,C,H,W]
-        s = self.c1(x)  # significant feature
-        u = self.c2(x)  # unimportant feature
-        # print(s.size())  ## 2, 64, 256, 256
-
-        # reduce channel
-        s_16 = self.reduce_c(s)
-        u_16 = self.reduce_c(u)
-        # print(s_16.size())  ## 2, 16, 128, 128
-
-        # flatten s and u
-        s_flat = torch.flatten(s_16, start_dim=1)
-        u_flat = torch.flatten(u_16, start_dim=1)
-        # print(s_flat.size())  ## 2, 262144
-
-        # create joint and marginal
-        joint = torch.cat([s_flat, u_flat], dim=1)
-        marginal = torch.cat([s_flat, torch.roll(u_flat, shifts=1, dims=0)], dim=1)
-        # print('---------------------')
-        # print(joint.size())    ## [2, 524288]
-
-        # calculate mi loss
-        mi_lb = self.mutual_information(joint, marginal)
-        loss_mi = mi_lb
-
-        # sigmoid
-        loss_mi = torch.sigmoid(loss_mi)
-
-        return s, loss_mi
-
-
-
-"""EMI""" 
-"""from HIDANe t TIP 2023"""
-class EMI(nn.Module):    
-    def __init__(self,in_dim):
-        super(EMI, self).__init__()
-
-        self.relu = nn.ReLU(inplace=True)
-        self.layer_cat1 = nn.Sequential(nn.Conv2d(in_dim*3, in_dim, kernel_size=3, stride=1, padding=1),nn.BatchNorm2d(in_dim),)        
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        k_size = 3
-        self.conv = nn.Conv1d(1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False) 
-        self.sigmoid = nn.Sigmoid()
-
-
-    def forward(self, x_ful, x1, x2):
-
-        ################################
-        x = self.layer_cat1(torch.cat([x1, x2, x_ful],dim=1))
-
-        y = self.avg_pool(x)
-
-        # Two different branches of ECA module
-        y = self.conv(y.squeeze(-1).transpose(-1, -2)).transpose(-1, -2).unsqueeze(-1)
-
-        # Multi-scale information fusion
-        y = self.sigmoid(y)
-
-        out = self.relu(x_ful + x * y.expand_as(x))
-        return out
-
-
-
-"""unet + 3de + EMI + hidi"""
-class UNet_3de_emi_hidi(nn.Module):
+"""unet + 3de + hidi"""
+class UNet3_resnet_hidi(nn.Module):
     def __init__(self, input_ch=3, output_ch=1):
-        super(UNet_3de_emi_hidi, self).__init__()
+        super(UNet3_resnet_hidi, self).__init__()
 
         self.Maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.Conv1 = conv_block(ch_in=input_ch, ch_out=64)
@@ -512,30 +430,11 @@ class UNet_3de_emi_hidi(nn.Module):
         self.fusion = Fusion2(2, 1)
         self.backbone =resnet34(pretrained=True)
 
-        # self.emi1 = EMI(512)
-        # self.emi2 = EMI(256)
-        # self.emi3 = EMI(128)
-        # self.emi4 = EMI(64)
-        self.sfd = selective_feature_decoupler(1, 1, 256, 256)
-
 
     def forward(self, x):
 
         ## x torch.Size([2, 3, 512, 512])
         """encoder"""
-        # x1 = self.Conv1(x)     ## torch.Size([2, 64, 512, 512])
-
-        # x2 = self.Maxpool(x1)
-        # x2 = self.Conv2(x2)    ## torch.Size([2, 128, 256, 256])
-
-        # x3 = self.Maxpool(x2)
-        # x3 = self.Conv3(x3)    ## torch.Size([2, 256, 128, 128])
-
-        # x4 = self.Maxpool(x3)
-        # x4 = self.Conv4(x4)    ## torch.Size([2, 512, 64, 64])
-
-        # x5 = self.Maxpool(x4)
-        # x5 = self.Conv5(x5)    ## torch.Size([2, 1024, 32, 32])
 
         ##--------------resnet----------------
         x = self.backbone.conv1(x)
@@ -624,11 +523,8 @@ class UNet_3de_emi_hidi(nn.Module):
         d1_3 = self.Conv_1x1(d2_3)   
 
         out = self.fusion(d1_2, d1_1, d1_3)
-        # print("out:")
-        # print(out.size())
-        out, loss_mi = self.sfd(out)
 
-        return d1_1, d1_2, d1_3, out, loss_mi    
+        return d1_1, d1_2, d1_3, out   
 
 
     def _initialize_weights(self):
@@ -643,11 +539,118 @@ class UNet_3de_emi_hidi(nn.Module):
 
 
 
+class Multi_decoder_Net(nn.Module):
+    def __init__(self, n_channels, n_classes=1, bilinear=False):
+        super(Multi_decoder_Net, self).__init__()
+        self.n_channels = n_channels
+        self.n_classes = n_classes
+        self.bilinear = bilinear
 
-# unet = UNet_3de_emi_hidi()
+        # encoder
+        self.inc = DoubleConv(n_channels, 64)
+        self.down1 = Down(64, 128)
+        self.down2 = Down(128, 256)
+        self.down3 = Down(256, 512)
+        self.down4 = Down(512, 1024)
+
+        # decoder
+        self.up1_1 = Up(1024, 512, bilinear)
+        self.up1_2 = Up(1024, 512, bilinear)
+        self.up1_3 = Up(1024, 512, bilinear)
+
+        self.up2_1 = Up(512, 256, bilinear)
+        self.up2_2 = Up(512, 256, bilinear)
+        self.up2_3 = Up(512, 256, bilinear)
+
+        self.up3_1 = Up(256, 128, bilinear)
+        self.up3_2 = Up(256, 128, bilinear)
+        self.up3_3 = Up(256, 128, bilinear)
+
+        self.up4_1 = Up(128, 64, bilinear)
+        self.up4_2 = Up(128, 64, bilinear)
+        self.up4_3 = Up(128, 64, bilinear)
+
+        self.out_1 = OutConv(64, n_classes)
+        self.out_2 = OutConv(64, n_classes)
+        self.out_3 = OutConv(64, n_classes)
+
+        self.fusion = Fusion1(2, 1)
+
+    def forward(self, x):
+        # encoder
+        x1 = self.inc(x)
+
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+
+        # decoder
+        o_4_1 = self.up1_1(x5, x4)
+        o_4_2 = self.up1_2(x5, x4)
+        o_4_3 = self.up1_3(x5, x4)
+
+        o_3_1 = self.up2_1(o_4_1, x3)
+        o_3_2 = self.up2_2(o_4_2, x3)
+        o_3_3 = self.up2_3(o_4_3, x3)
+
+        o_2_1 = self.up3_1(o_3_1, x2)
+        o_2_2 = self.up3_2(o_3_2, x2)
+        o_2_3 = self.up3_3(o_3_3, x2)
+
+        o_1_1 = self.up4_1(o_2_1, x1)
+        o_1_2 = self.up4_2(o_2_2, x1)
+        o_1_3 = self.up4_3(o_2_3, x1)
+
+        o_seg1 = self.out_1(o_1_1)
+        o_seg2 = self.out_2(o_1_2)
+        o_seg3 = self.out_3(o_1_3)
+
+                # 打印三个特征图的统计信息
+        print(f"o_seg1 - shape: {x.shape}")
+        print(f"o_seg1 - min: {o_seg1.min().item():.4f}, max: {o_seg1.max().item():.4f}, mean: {o_seg1.mean().item():.4f}")
+        print(f"o_seg2 - min: {o_seg2.min().item():.4f}, max: {o_seg2.max().item():.4f}, mean: {o_seg2.mean().item():.4f}")
+        print(f"o_seg3 - min: {o_seg3.min().item():.4f}, max: {o_seg3.max().item():.4f}, mean: {o_seg3.mean().item():.4f}")
+        
+        # 还可以打印前几个值看看
+        print(f"x前10个值: {o_seg1.flatten()[:10]}")
+        print(f"y前10个值: {o_seg2.flatten()[:10]}")
+        print(f"z前10个值: {o_seg3.flatten()[:10]}")
+
+        out = self.fusion(o_seg2, o_seg1, o_seg3)
+
+        # if self.n_classes > 1:
+        #     seg1 = F.softmax(o_seg1, dim=1)
+        #     seg2 = F.softmax(o_seg2, dim=1)
+        #     seg3 = F.softmax(o_seg3, dim=1)
+        #     return seg1, seg2, seg3
+        # elif self.n_classes == 1:
+        #     seg1 = torch.sigmoid(o_seg1)
+        #     seg2 = torch.sigmoid(o_seg2)
+        #     seg3 = torch.sigmoid(o_seg3)
+        #     return seg1, seg2, seg3
+        return o_seg1, o_seg2, o_seg3, out
+
+
+# unet = Multi_decoder_Net(3)
 # a = torch.rand(1, 3, 256, 256)
-# output1, output2, output3, out, loss_mi = unet.forward(a)
-# print(out.size())
+# output1, output2, output3 = unet.forward(a)
+# # print(out.size())
 # print(output1.size())   # torch.Size([2, 1, 512, 512])
 # print(output2.size()) 
 # print(output3.size()) 
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
