@@ -179,7 +179,7 @@ img[img > 100] = 1
 # custom_skel = generate_custom_skeleton_efficient(binary_image, a=3)
 
 # 调整阈值a观察效果
-for a in [1,2,10]:
+for a in [1,2,3]:
     edt, adjusted_radius, skeleton, custom_skeleton = generate_custom_skeleton_2(img, a=a)
     plt.imshow(custom_skeleton, cmap='gray')
     plt.title(f'Custom Skeleton (a={a})')

@@ -245,6 +245,9 @@ class Fusion1(nn.Module):
         # 找到最大值和对应的索引
         max_vals, max_indices = torch.max(stacked, dim=0)
 
+        # 创建掩码：当 max_indices != 2 时为 1，否则为 0
+        mask = (max_indices != 2).float()  # [batch, channel, H, W]
+
         # 0: 来自 xy1
         # 1: 来自 xy2  
         # 2: 来自 xy3
@@ -279,7 +282,7 @@ class Fusion1(nn.Module):
         output = self.conv3(y * w.unsqueeze(-2).unsqueeze(-1).expand_as(y))
         out = self.conv(output)
 
-        return out
+        return out, mask  # 返回输出和掩码
 
 
 
@@ -606,18 +609,18 @@ class Multi_decoder_Net(nn.Module):
         o_seg2 = self.out_2(o_1_2)
         o_seg3 = self.out_3(o_1_3)
 
-                # 打印三个特征图的统计信息
-        print(f"o_seg1 - shape: {x.shape}")
-        print(f"o_seg1 - min: {o_seg1.min().item():.4f}, max: {o_seg1.max().item():.4f}, mean: {o_seg1.mean().item():.4f}")
-        print(f"o_seg2 - min: {o_seg2.min().item():.4f}, max: {o_seg2.max().item():.4f}, mean: {o_seg2.mean().item():.4f}")
-        print(f"o_seg3 - min: {o_seg3.min().item():.4f}, max: {o_seg3.max().item():.4f}, mean: {o_seg3.mean().item():.4f}")
+        # # 打印三个特征图的统计信息
+        # print(f"o_seg1 - shape: {x.shape}")
+        # print(f"o_seg1 - min: {o_seg1.min().item():.4f}, max: {o_seg1.max().item():.4f}, mean: {o_seg1.mean().item():.4f}")
+        # print(f"o_seg2 - min: {o_seg2.min().item():.4f}, max: {o_seg2.max().item():.4f}, mean: {o_seg2.mean().item():.4f}")
+        # print(f"o_seg3 - min: {o_seg3.min().item():.4f}, max: {o_seg3.max().item():.4f}, mean: {o_seg3.mean().item():.4f}")
         
-        # 还可以打印前几个值看看
-        print(f"x前10个值: {o_seg1.flatten()[:10]}")
-        print(f"y前10个值: {o_seg2.flatten()[:10]}")
-        print(f"z前10个值: {o_seg3.flatten()[:10]}")
+        # # 还可以打印前几个值看看
+        # print(f"x前10个值: {o_seg1.flatten()[:10]}")
+        # print(f"y前10个值: {o_seg2.flatten()[:10]}")
+        # print(f"z前10个值: {o_seg3.flatten()[:10]}")
 
-        out = self.fusion(o_seg2, o_seg1, o_seg3)
+        out, mask = self.fusion(o_seg2, o_seg1, o_seg3)
 
         # if self.n_classes > 1:
         #     seg1 = F.softmax(o_seg1, dim=1)
@@ -629,7 +632,7 @@ class Multi_decoder_Net(nn.Module):
         #     seg2 = torch.sigmoid(o_seg2)
         #     seg3 = torch.sigmoid(o_seg3)
         #     return seg1, seg2, seg3
-        return o_seg1, o_seg2, o_seg3, out
+        return o_seg1, o_seg2, o_seg3, out, mask
 
 
 # unet = Multi_decoder_Net(3)

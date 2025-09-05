@@ -233,14 +233,14 @@ class unet3_resnet(base_model):
             # edge = edge.cuda(non_blocking=True).float()
             preds, pred_edge, pred_skeleton = self.network(images)
 
-            # skeleton_np = skeleton.numpy().astype(np.uint8)
-            # custom_skeletons = []
-            # for i in range(skeleton_np.shape[0]):  
-            #     single_skeleton = skeleton_np[i].squeeze(0)
-            #     custom_skel = self.generate_custom_skeleton_efficient(single_skeleton)
-            #     custom_skel_tensor = torch.from_numpy(custom_skel.astype(np.float32)).unsqueeze(0)
-            #     custom_skeletons.append(custom_skel_tensor)
-            # custom_skeleton = torch.stack(custom_skeletons).cuda(non_blocking=True)
+            skeleton_np = skeleton.numpy().astype(np.uint8)
+            custom_skeletons = []
+            for i in range(skeleton_np.shape[0]):  
+                single_skeleton = skeleton_np[i].squeeze(0)
+                custom_skel = self.generate_custom_skeleton_efficient(single_skeleton)
+                custom_skel_tensor = torch.from_numpy(custom_skel.astype(np.float32)).unsqueeze(0)
+                custom_skeletons.append(custom_skel_tensor)
+            custom_skeleton = torch.stack(custom_skeletons).cuda(non_blocking=True)
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_edge, edge)

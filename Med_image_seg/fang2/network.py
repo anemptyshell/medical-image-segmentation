@@ -179,52 +179,52 @@ class Fusion1(nn.Module):
         xy3 = xz
     
         # # 创建堆叠的张量以便找到最大值索引
-        # stacked = torch.stack([xy1, xy2, xy3], dim=0)  # [3, batch, channel, H, W]
+        stacked = torch.stack([xy1, xy2, xy3], dim=0)  # [3, batch, channel, H, W]
         
         # # 找到最大值和对应的索引
-        # max_vals, max_indices = torch.max(stacked, dim=0)
+        max_vals, max_indices = torch.max(stacked, dim=0)
 
         # # 0: 来自 xy1
         # # 1: 来自 xy2  
         # # 2: 来自 xy3
         
-        # total_pixels = max_indices.numel()
-        # count_xy1 = (max_indices == 0).sum().item()
-        # count_xy2 = (max_indices == 1).sum().item()
-        # count_xy3 = (max_indices == 2).sum().item()
+        total_pixels = max_indices.numel()
+        count_xy1 = (max_indices == 0).sum().item()
+        count_xy2 = (max_indices == 1).sum().item()
+        count_xy3 = (max_indices == 2).sum().item()
 
         # 使用原逻辑但记录来源
-        result1 = torch.where(xy1 > xy2, xy1, xy2)
-        source1 = torch.where(xy1 > xy2, torch.zeros_like(xy1), torch.ones_like(xy2))  # 0:xy1, 1:xy2
+        # result1 = torch.where(xy1 > xy2, xy1, xy2)
+        # source1 = torch.where(xy1 > xy2, torch.zeros_like(xy1), torch.ones_like(xy2))  # 0:xy1, 1:xy2
         
-        resultk = torch.where(result1 > xy3, result1, xy3)
-        source_final = torch.where(result1 > xy3, source1, 2 * torch.ones_like(xy3))  # 0:xy1, 1:xy2, 2:xy3
+        # resultk = torch.where(result1 > xy3, result1, xy3)
+        # source_final = torch.where(result1 > xy3, source1, 2 * torch.ones_like(xy3))  # 0:xy1, 1:xy2, 2:xy3
         
         # 统计最终来源
-        count_xy1 = (source_final == 0).sum().item()
-        count_xy2 = (source_final == 1).sum().item()
-        count_xy3 = (source_final == 2).sum().item()
-        logging.info(f"Forward pass {self.forward_count}:")
-        logging.info(f"  来自 xy1 的像素数: {count_xy1} ")
-        logging.info(f"  来自 xy2 的像素数: {count_xy2} ")
-        logging.info(f"  来自 xy3 的像素数: {count_xy3} ")
+        # count_xy1 = (source_final == 0).sum().item()
+        # count_xy2 = (source_final == 1).sum().item()
+        # count_xy3 = (source_final == 2).sum().item()
+        # logging.info(f"Forward pass {self.forward_count}:")
+        # logging.info(f"  来自 xy1 的像素数: {count_xy1} ")
+        # logging.info(f"  来自 xy2 的像素数: {count_xy2} ")
+        # logging.info(f"  来自 xy3 的像素数: {count_xy3} ")
             
         # 计算百分比
-        # perc_xy1 = count_xy1 / total_pixels * 100
-        # perc_xy2 = count_xy2 / total_pixels * 100
-        # perc_xy3 = count_xy3 / total_pixels * 100
+        perc_xy1 = count_xy1 / total_pixels * 100
+        perc_xy2 = count_xy2 / total_pixels * 100
+        perc_xy3 = count_xy3 / total_pixels * 100
         
         # 保存到日志
-        # logging.info(f"Forward pass {self.forward_count}:")
-        # logging.info(f"  来自 xy1 的像素数: {count_xy1} ({perc_xy1:.2f}%)")
-        # logging.info(f"  来自 xy2 的像素数: {count_xy2} ({perc_xy2:.2f}%)")
-        # logging.info(f"  来自 xy3 的像素数: {count_xy3} ({perc_xy3:.2f}%)")
-        # logging.info(f"  总像素数: {total_pixels}")
+        logging.info(f"Forward pass {self.forward_count}:")
+        logging.info(f"  来自 xy1 的像素数: {count_xy1} ({perc_xy1:.2f}%)")
+        logging.info(f"  来自 xy2 的像素数: {count_xy2} ({perc_xy2:.2f}%)")
+        logging.info(f"  来自 xy3 的像素数: {count_xy3} ({perc_xy3:.2f}%)")
+        logging.info(f"  总像素数: {total_pixels}")
         
         # 同时在控制台输出（可选）
         # print(f"Forward {self.forward_count}: xy1={perc_xy1:.1f}%, xy2={perc_xy2:.1f}%, xy3={perc_xy3:.1f}%")
         
-        # resultk = max_vals  
+        resultk = max_vals  
 
         y_view = y.view(y.shape[0], y.shape[1], -1)
         resultk_view = resultk.view(resultk.shape[0], resultk.shape[1], -1)
@@ -509,7 +509,7 @@ class UNet_3de_emi_hidi(nn.Module):
         self.Conv_1x1 = nn.Conv2d(64, output_ch, kernel_size=1, stride=1, padding=0)
 
 
-        self.fusion = Fusion2(2, 1)
+        self.fusion = Fusion1(2, 1)
         self.backbone =resnet34(pretrained=True)
 
         # self.emi1 = EMI(512)
