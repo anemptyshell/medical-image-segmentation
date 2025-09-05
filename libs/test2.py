@@ -96,7 +96,7 @@ def generate_custom_skeleton_efficient(binary_image, a=1):
 def generate_custom_skeleton_alternative(binary_image, a=1):
     """
     根据骨架点处的半径值来调整血管宽度
-    - 半径 < a: 保留原血管
+    - 半径 < a: 保留原血管 .
     - 半径 > a: 将血管宽度削减到半径a
     """
     
