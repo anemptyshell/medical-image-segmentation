@@ -184,3 +184,114 @@ for a in [1,2,3]:
     plt.imshow(custom_skeleton, cmap='gray')
     plt.title(f'Custom Skeleton (a={a})')
     plt.show()
+
+
+
+
+
+
+
+
+
+def generate_custom_skeleton_alternative(binary_image, a=1):
+    """
+    根据骨架点处的半径值来调整血管宽度
+    - 半径 < a: 保留原血管 .
+    - 半径 > a: 将血管宽度削减到半径a
+    """
+    
+    edt = distance_transform_edt(binary_image)
+    skeleton = skeletonize(binary_image)
+    skeleton_radii = np.where(skeleton, edt, 0)
+    
+    # 创建自定义骨架区域
+    custom_skeleton = np.zeros_like(binary_image, dtype=bool)
+    
+    # 获取所有骨架点坐标和半径
+    y_coords, x_coords = np.where(skeleton)
+    radii = skeleton_radii[skeleton]
+    
+    # 创建坐标网格
+    y_grid, x_grid = np.indices(binary_image.shape)
+    
+    for y, x, radius in zip(y_coords, x_coords, radii):
+        # 计算图像中每个像素到当前骨架点 (y, x) 的距离。
+        dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+        
+        if radius >= a:
+            # 半径大于a：创建半径为a的圆形区域
+            circle_region = dist_to_center <= a
+            custom_skeleton = np.logical_or(custom_skeleton, circle_region)
+    
+    # 对于半径<=a的区域，我们直接使用原始血管图像
+    # 但需要确保这些区域不会被过度削减
+    mask_radius_leq_a = np.zeros_like(binary_image, dtype=bool)
+    
+    for y, x, radius in zip(y_coords, x_coords, radii):
+        if radius <= a:
+            dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+            circle_region = dist_to_center <= radius  # 使用原始半径
+            mask_radius_leq_a = np.logical_or(mask_radius_leq_a, circle_region)
+    
+    # 合并结果：半径<=a的区域 + 半径>a的削减区域
+    custom_skeleton = np.logical_or(custom_skeleton, mask_radius_leq_a) 
+    # 确保不超过原始血管边界
+    custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
+    
+    return edt, skeleton, custom_skeleton
+
+
+
+
+# image_path = "21.png"
+# cap = cv2.VideoCapture(image_path)
+# ret, img = cap.read()
+# cap.release()
+# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# img = img.astype(np.uint8)
+
+# # 二值化图像
+# _, binary_img = cv2.threshold(img, 0.5, 1, cv2.THRESH_BINARY)
+
+
+# binary_img = torch.randint(0, 2, (256, 256), dtype=torch.float32)
+# binary_img = binary_img.numpy().astype(np.uint8)
+
+# # 测试不同a值
+# a_values = [1, 2, 3, 4]
+# fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+# axes = axes.ravel()
+
+# for i, a in enumerate(a_values):
+#     edt, skeleton, custom_skeleton = generate_custom_skeleton_efficient(binary_img, a=a)
+#     axes[i].imshow(custom_skeleton, cmap='gray')
+#     axes[i].set_title(f'Custom Skeleton (a={a})')
+#     axes[i].axis('off')
+
+# plt.tight_layout()
+# plt.show()
+
+
+
+image_path = "21.png"
+
+cap = cv2.VideoCapture(image_path)
+ret, img = cap.read()
+cap.release()
+img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+img = img.astype(np.uint8)
+img[img <= 100] = 0
+img[img > 100] = 1
+
+a_values = [0.5, 1, 1.5, 2]
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+axes = axes.ravel()
+
+for i, a in enumerate(a_values):
+    edt, skeleton, custom_skeleton = generate_custom_skeleton_alternative(img, a=a)
+    axes[i].imshow(custom_skeleton, cmap='gray')
+    axes[i].set_title(f'Custom Skeleton (a={a})')
+    axes[i].axis('off')
+
+plt.tight_layout()
+plt.show()
