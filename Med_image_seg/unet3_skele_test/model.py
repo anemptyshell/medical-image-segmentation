@@ -11,7 +11,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet3_resnet.network import UNet3_resnet, Multi_decoder_Net
+from Med_image_seg.unet3_skele_test.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 # from matplotlib import pyplot as plt
@@ -30,7 +30,7 @@ def arguments():
     return args
 
 
-class unet3_resnet(base_model):
+class unet3_skele_test(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -53,8 +53,7 @@ class unet3_resnet(base_model):
         """ Trainer """ 
         print('#----------Prepareing Model----------#')
 
-        self.network = UNet3_resnet().to('cuda')
-        # self.network = Multi_decoder_Net(3).to('cuda')
+        self.network = Multi_decoder_Net(3).to('cuda')
         self.step = 0
         self.save_args()
   
@@ -76,7 +75,6 @@ class unet3_resnet(base_model):
         csv1 = 'test_results'+'.csv'
         with open(os.path.join(self.args.log_dir, csv1), 'w') as f:
             f.write('dice, Jac, clDice, acc, sen, spe, pre, recall, f1 \n')
-
 
     def generate_custom_skeleton_alternative(binary_image, a=1):
         """
@@ -123,6 +121,59 @@ class unet3_resnet(base_model):
         # 确保不超过原始血管边界
         custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
 
+        return custom_skeleton
+
+
+    def generate_custom_skeleton_alternative_tensor(self, binary_tensor, a=1):
+
+        binary_image = binary_tensor.bool()
+        
+        edt_np = distance_transform_edt(binary_image.cpu().numpy())
+        edt = torch.from_numpy(edt_np).to(binary_tensor.device)
+        
+        skeleton_np = skeletonize(binary_image.cpu().numpy())
+        skeleton = torch.from_numpy(skeleton_np).to(binary_tensor.device)
+        
+        skeleton_radii = torch.where(skeleton, edt, torch.tensor(0, device=binary_tensor.device))
+
+        y_grid, x_grid = torch.meshgrid(
+            torch.arange(binary_image.size(0), device=binary_tensor.device),
+            torch.arange(binary_image.size(1), device=binary_tensor.device)
+        )
+        
+        # 获取所有骨架点坐标和半径
+        y_coords, x_coords = torch.where(skeleton)
+        radii = skeleton_radii[skeleton]
+        
+        custom_skeleton = torch.zeros_like(binary_image, dtype=torch.bool)
+        
+        # 处理半径>a的点
+        mask_radius_gt_a = radii > a
+        if mask_radius_gt_a.any():
+            y_gt = y_coords[mask_radius_gt_a]
+            x_gt = x_coords[mask_radius_gt_a]
+            r_gt = radii[mask_radius_gt_a]
+            
+            dist_sq = (y_grid.unsqueeze(-1) - y_gt)**2 + (x_grid.unsqueeze(-1) - x_gt)**2
+            dist = torch.sqrt(dist_sq)
+
+            circles = dist <= a
+            custom_skeleton = circles.any(dim=-1)
+        
+        mask_radius_le_a = radii <= a
+        if mask_radius_le_a.any():
+            y_le = y_coords[mask_radius_le_a]
+            x_le = x_coords[mask_radius_le_a]
+            r_le = radii[mask_radius_le_a]
+            
+            dist_sq = (y_grid.unsqueeze(-1) - y_le)**2 + (x_grid.unsqueeze(-1) - x_le)**2
+            dist = torch.sqrt(dist_sq)
+
+            circles = dist <= r_le
+            custom_skeleton = torch.logical_or(custom_skeleton, circles.any(dim=-1))
+        
+        custom_skeleton = torch.logical_and(custom_skeleton, binary_image)
+        
         return custom_skeleton
 
 
@@ -235,7 +286,7 @@ class unet3_resnet(base_model):
                       'dice': AverageMeter()}
         
         self.network.train()
-        loss_list = [] 
+        
         # iter_num = 0
         # max_iterations = self.args.epochs * len(train_loader)
         pbar = tqdm(total=len(train_loader))
@@ -243,24 +294,21 @@ class unet3_resnet(base_model):
         for iter, data in enumerate(train_loader):
             step += iter
             
-            images, targets, edge, skeleton = data
+            images, targets, edge, _ = data   ## 验证skeleton_1
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
-            edge, skeleton = edge.cuda(non_blocking=True).float(), skeleton.cuda(non_blocking=True).float()
-            # edge = edge.cuda(non_blocking=True).float()
+            # edge, skeleton = edge.cuda(non_blocking=True).float(), skeleton.cuda(non_blocking=True).float()
+            edge = edge.cuda(non_blocking=True).float()
             preds, pred_edge, pred_skeleton = self.network(images)
 
-            skeleton_np = skeleton.numpy().astype(np.uint8)
-            custom_skeletons = []
-            for i in range(skeleton_np.shape[0]):  
-                single_skeleton = skeleton_np[i].squeeze(0)
-                custom_skel = self.generate_custom_skeleton_alternative(single_skeleton)
-                custom_skel_tensor = torch.from_numpy(custom_skel.astype(np.float32)).unsqueeze(0)
-                custom_skeletons.append(custom_skel_tensor)
-            custom_skeleton = torch.stack(custom_skeletons).cuda(non_blocking=True)
+            # 生成自定义骨架（直接在GPU上处理整个batch）
+            custom_skeleton = torch.stack([
+                self.generate_custom_skeleton_alternative_tensor(target.squeeze(0))
+                for target in targets
+            ]).unsqueeze(1).float()
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_edge, edge)
-            loss3 = self.BceDiceLoss(pred_skeleton, skeleton)
+            loss3 = self.BceDiceLoss(pred_skeleton, custom_skeleton)
             loss = loss1 + 0.5 * loss2 + 0.5 * loss3
            
             iou, dice = iou_score(preds, targets)

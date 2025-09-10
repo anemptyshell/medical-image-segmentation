@@ -14,6 +14,9 @@ from Med_image_seg.fang1.utils.loss import BceDiceLoss, soft_iou_loss
 from Med_image_seg.unet3_resnet_hidi1.network import UNet3_resnet_hidi, Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
+from skimage.morphology import skeletonize
+from scipy.ndimage import distance_transform_edt
+
 # from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
@@ -77,6 +80,45 @@ class unet3_resnet_hidi1(base_model):
         csv1 = 'test_results'+'.csv'
         with open(os.path.join(self.args.log_dir, csv1), 'w') as f:
             f.write('dice, Jac, clDice, acc, sen, spe, pre, recall, f1 \n')
+
+    def generate_custom_skeleton_alternative(self, binary_image, a=1):
+        """
+        根据骨架点处的半径值来调整血管宽度
+        - 半径 < a: 保留原血管 .
+        - 半径 > a: 将血管宽度削减到半径a
+        """
+
+        edt = distance_transform_edt(binary_image)
+        skeleton = skeletonize(binary_image)
+        skeleton_radii = np.where(skeleton, edt, 0)
+
+        custom_skeleton = np.zeros_like(binary_image, dtype=bool)
+
+        y_coords, x_coords = np.where(skeleton)
+        radii = skeleton_radii[skeleton]
+
+        y_grid, x_grid = np.indices(binary_image.shape)
+
+        for y, x, radius in zip(y_coords, x_coords, radii):
+            dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+
+            if radius >= a:
+                circle_region = dist_to_center <= a
+                custom_skeleton = np.logical_or(custom_skeleton, circle_region)
+
+        mask_radius_leq_a = np.zeros_like(binary_image, dtype=bool)
+
+        for y, x, radius in zip(y_coords, x_coords, radii):
+            if radius <= a:
+                dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+                circle_region = dist_to_center <= radius  # 使用原始半径
+                mask_radius_leq_a = np.logical_or(mask_radius_leq_a, circle_region)
+
+        custom_skeleton = np.logical_or(custom_skeleton, mask_radius_leq_a) 
+        custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
+
+        return custom_skeleton
+
 
 
     def train(self, train_loader, test_loader):
@@ -201,6 +243,15 @@ class unet3_resnet_hidi1(base_model):
             edge, skeleton = edge.cuda(non_blocking=True).float(), skeleton.cuda(non_blocking=True).float()
 
             pred_raw, pred_edge, pred_skeleton, preds = self.network(images)
+
+            targets_np = targets.numpy().astype(np.uint8)
+            custom_skeletons = []
+            for i in range(targets_np.shape[0]):  
+                single_target = targets_np[i].squeeze(0)
+                custom_skel = self.generate_custom_skeleton_alternative(single_target)
+                custom_skel_tensor = torch.from_numpy(custom_skel.astype(np.float32)).unsqueeze(0)
+                custom_skeletons.append(custom_skel_tensor)
+            custom_skeleton = torch.stack(custom_skeletons).cuda(non_blocking=True)
 
             loss1 = self.loss_iou(preds, targets)
             loss2 = self.BceDiceLoss(pred_edge, edge)
