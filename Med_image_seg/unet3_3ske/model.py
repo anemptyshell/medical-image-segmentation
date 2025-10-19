@@ -11,7 +11,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet3_skele_test.network import Multi_decoder_Net
+from Med_image_seg.unet3_3ske.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 # from matplotlib import pyplot as plt
@@ -31,7 +31,7 @@ def arguments():
     return args
 
 
-class unet3_skele_test(base_model):
+class unet3_3ske(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -76,6 +76,53 @@ class unet3_skele_test(base_model):
         csv1 = 'test_results'+'.csv'
         with open(os.path.join(self.args.log_dir, csv1), 'w') as f:
             f.write('dice, Jac, clDice, acc, sen, spe, pre, recall, f1 \n')
+
+    def generate_custom_skeleton_alternative(binary_image, a=1):
+        """
+        根据骨架点处的半径值来调整血管宽度
+        - 半径 < a: 保留原血管 .
+        - 半径 > a: 将血管宽度削减到半径a
+        """
+
+        edt = distance_transform_edt(binary_image)
+        skeleton = skeletonize(binary_image)
+        skeleton_radii = np.where(skeleton, edt, 0)
+
+        # 创建自定义骨架区域
+        custom_skeleton = np.zeros_like(binary_image, dtype=bool)
+
+        # 获取所有骨架点坐标和半径
+        y_coords, x_coords = np.where(skeleton)
+        radii = skeleton_radii[skeleton]
+
+        # 创建坐标网格
+        y_grid, x_grid = np.indices(binary_image.shape)
+
+        for y, x, radius in zip(y_coords, x_coords, radii):
+            # 计算图像中每个像素到当前骨架点 (y, x) 的距离。
+            dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+
+            if radius >= a:
+                # 半径大于a：创建半径为a的圆形区域
+                circle_region = dist_to_center <= a
+                custom_skeleton = np.logical_or(custom_skeleton, circle_region)
+
+        # 对于半径<=a的区域，我们直接使用原始血管图像
+        # 但需要确保这些区域不会被过度削减
+        mask_radius_leq_a = np.zeros_like(binary_image, dtype=bool)
+
+        for y, x, radius in zip(y_coords, x_coords, radii):
+            if radius <= a:
+                dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+                circle_region = dist_to_center <= radius  # 使用原始半径
+                mask_radius_leq_a = np.logical_or(mask_radius_leq_a, circle_region)
+
+        # 合并结果：半径<=a的区域 + 半径>a的削减区域
+        custom_skeleton = np.logical_or(custom_skeleton, mask_radius_leq_a) 
+        # 确保不超过原始血管边界
+        custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
+
+        return custom_skeleton
 
 
     def generate_custom_skeleton_alternative_tensor(self, binary_tensor, a=1):
@@ -129,6 +176,7 @@ class unet3_skele_test(base_model):
         custom_skeleton = torch.logical_and(custom_skeleton, binary_image)
         
         return custom_skeleton
+
 
 
     def train(self, train_loader, test_loader):
@@ -231,6 +279,7 @@ class unet3_skele_test(base_model):
     
             torch.cuda.empty_cache()
 
+
     def difference_loss(self, pred1, pred2, pred3):
         ideal_difference = pred1 - pred2
         return F.l1_loss(pred3, torch.clamp(ideal_difference, 0, 1))
@@ -242,41 +291,42 @@ class unet3_skele_test(base_model):
                       'dice': AverageMeter()}
         
         self.network.train()
-        
-        # iter_num = 0
-        # max_iterations = self.args.epochs * len(train_loader)
+
         pbar = tqdm(total=len(train_loader))
 
         for iter, data in enumerate(train_loader):
             step += iter
             
-            images, targets, _, _ = data   ## 验证skeleton_1
+            images, targets, ske_strong, ske_alter = data   ## 验证skeleton_1
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
-            # edge, skeleton = edge.cuda(non_blocking=True).float(), skeleton.cuda(non_blocking=True).float()
+            ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
             # edge = edge.cuda(non_blocking=True).float()
-            preds, pred_edge, pred_skeleton = self.network(images)
+            preds, pred_strong, pred_alter, pred_edge = self.network(images)
 
-            edges = []
-            for target in targets:
-                target_np = target.squeeze(0).cpu().numpy()  # 转numpy
-                target_np = (target_np * 255).astype(np.uint8)  # 转0-255
-                contours, _ = cv2.findContours(target_np, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-                edge_np = np.zeros_like(target_np, dtype=np.uint8)
-                cv2.drawContours(edge_np, contours, -1, 255, 1)
-                edge_np = edge_np.astype(np.float32) / 255.0  # 归一化
-                edges.append(torch.from_numpy(edge_np).unsqueeze(0))
-            edges = torch.stack(edges).cuda(non_blocking=True)  # 转tensor
+            # edges = []
+            # for target in targets:
+            #     target_np = target.squeeze(0).cpu().numpy()  # 转numpy
+            #     target_np = (target_np * 255).astype(np.uint8)  # 转0-255
+            #     contours, _ = cv2.findContours(target_np, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            #     edge_np = np.zeros_like(target_np, dtype=np.uint8)
+            #     cv2.drawContours(edge_np, contours, -1, 255, 1)
+            #     edge_np = edge_np.astype(np.float32) / 255.0  # 归一化
+            #     edges.append(torch.from_numpy(edge_np).unsqueeze(0))
+            # edges = torch.stack(edges).cuda(non_blocking=True)  # 转tensor
 
-            # 生成自定义骨架（直接在GPU上处理整个batch）
-            custom_skeleton = torch.stack([
-                self.generate_custom_skeleton_alternative_tensor(target.squeeze(0))
-                for target in targets
-            ]).unsqueeze(1).float()
+            # # 生成自定义骨架（直接在GPU上处理整个batch）
+            # custom_skeleton = torch.stack([
+            #     self.generate_custom_skeleton_alternative_tensor(target.squeeze(0))
+            #     for target in targets
+            # ]).unsqueeze(1).float()
 
             loss1 = self.BceDiceLoss(preds, targets)
-            loss2 = self.BceDiceLoss(pred_edge, edges)
-            loss3 = self.BceDiceLoss(pred_skeleton, custom_skeleton)
-            loss = loss1 + 0.5 * loss2 + 0.5 * loss3
+            loss2 = self.BceDiceLoss(pred_strong, ske_strong)
+            loss3 = self.BceDiceLoss(pred_alter, ske_alter)
+            ideal_diff = pred_strong - pred_alter
+            loss_diff = F.l1_loss(pred_edge, torch.clamp(ideal_diff, 0, 1))
+            
+            loss = loss1 + 0.5 * loss2 + 0.5 * loss3 + loss_diff
            
             iou, dice = iou_score(preds, targets)
 
@@ -310,7 +360,6 @@ class unet3_skele_test(base_model):
                             ('iou', avg_meters['iou'].avg),
                             ('dice', avg_meters['dice'].avg)])
     
-    
 
 
     def val_epoch(self, test_loader, epoch):
@@ -335,7 +384,7 @@ class unet3_skele_test(base_model):
                 images, targets = data
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
-                preds, pred_edge, pred_skeleton = self.network(images)
+                preds, pred_strong, pred_alter, pred_edge = self.network(images)
                 
                 loss = self.BceDiceLoss(preds, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -407,7 +456,7 @@ class unet3_skele_test(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
 
-                preds, pred_edge, pred_skeleton = self.network(images)
+                preds, pred_strong, pred_alter, pred_edge = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))

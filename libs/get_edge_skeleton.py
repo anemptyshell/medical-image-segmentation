@@ -45,44 +45,44 @@ def edge_extract(root):
 #     return 0
 
 
-# def edge_extract(root):
-#     img_root = os.path.join(root, 'masks')
-#     edge_root = os.path.join(root, 'masks_edges1')
+def edge_extract(root):
+    img_root = os.path.join(root, 'masks')
+    edge_root = os.path.join(root, 'masks_edges1')
 
-#     if not os.path.exists(edge_root):
-#         os.makedirs(edge_root)  # 创建目录，支持多级目录
-#     file_names = os.listdir(img_root)
+    if not os.path.exists(edge_root):
+        os.makedirs(edge_root)  # 创建目录，支持多级目录
+    file_names = os.listdir(img_root)
 
-#     for name in file_names:
-#         img_path = os.path.join(img_root, name)
-#         cap = cv2.VideoCapture(img_path)
-#         ret, img = cap.read()
-#         cap.release()
+    for name in file_names:
+        img_path = os.path.join(img_root, name)
+        cap = cv2.VideoCapture(img_path)
+        ret, img = cap.read()
+        cap.release()
         
-#         if not ret:
-#             print(f"无法读取图像: {name}")
-#             continue
+        if not ret:
+            print(f"无法读取图像: {name}")
+            continue
             
-#         # 转换为灰度图
-#         if len(img.shape) == 3:
-#             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-#         img = img.astype(np.uint8)
+        # 转换为灰度图
+        if len(img.shape) == 3:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = img.astype(np.uint8)
         
-#         contours, _ = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-#         contour_img = np.zeros_like(img, dtype=np.uint8)
-#         cv2.drawContours(contour_img, contours, -1, 255, 1)
-#         base_name = os.path.splitext(name)[0]  
-#         output_name = f"{base_name}.png" 
-#         print(contour_img)
-#         break
+        contours, _ = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contour_img = np.zeros_like(img, dtype=np.uint8)
+        cv2.drawContours(contour_img, contours, -1, 255, 1)
+        base_name = os.path.splitext(name)[0]  
+        output_name = f"{base_name}.png" 
+        print(contour_img)
+        break
         
-#         # save_path = os.path.join(edge_root, output_name)
-#         # if cv2.imwrite(save_path, contour_img):
-#         #     print(f"成功保存: {save_path}")
-#         # else:
-#         #     print(f"保存失败: {save_path}")
+        # save_path = os.path.join(edge_root, output_name)
+        # if cv2.imwrite(save_path, contour_img):
+        #     print(f"成功保存: {save_path}")
+        # else:
+        #     print(f"保存失败: {save_path}")
         
-#     return 0
+    return 0
 
 
 # def skeleton_extract(root):
@@ -95,7 +95,7 @@ def edge_extract(root):
 #     file_names = os.listdir(img_root)
 #     for name in file_names:
 #         img_path = os.path.join(img_root, name)
-        
+         
 #         if name.lower().endswith('.gif'):
 #             cap = cv2.VideoCapture(img_path)
 #             ret, img = cap.read()
@@ -172,7 +172,7 @@ def generate_custom_skeleton_alternative(binary_image, a=1):
     # 合并结果：半径<=a的区域 + 半径>a的削减区域
     custom_skeleton = np.logical_or(custom_skeleton, mask_radius_leq_a) 
     # 确保不超过原始血管边界
-    custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
+    # custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
     
     return custom_skeleton
 
@@ -181,7 +181,7 @@ def generate_custom_skeleton_alternative(binary_image, a=1):
 
 def skeleton_extract(root, a):
     img_root = os.path.join(root, 'masks')
-    skeleton_root = os.path.join(root, 'skeleton_2')
+    skeleton_root = os.path.join(root, f'strong_{a}')
     
     if not os.path.exists(skeleton_root):
         os.makedirs(skeleton_root)  
@@ -222,13 +222,19 @@ def skeleton_extract(root, a):
 
 
 
-
-
-
-
-
 if __name__ == '__main__':
-    train_er = "/home/my/data/STARE/train/"
-    # edge_extract(train_er)
-    skeleton_extract(train_er, 2)
+    # train_er = "/home/my/data/CHASE_DB1/train/"
+    # # edge_extract(train_er)
+    # for a in [0.5, 1, 1.5]:
+    #     skeleton_extract(train_er, a)
+
+    # train_er1 = "/home/my/data/DRIVE/train/"
+    # for a in [0.5, 1, 1.5]:
+    #     skeleton_extract(train_er1, a)
+    
+    train_er2 = "/home/my/data/STARE/train/"
+    for a in [1, 1.5]:
+        skeleton_extract(train_er2, a)
+
+
     
