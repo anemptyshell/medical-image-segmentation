@@ -50,7 +50,8 @@ class ISIC_datasets(Dataset):
             mask_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "train/masks/"))
             # thin_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "thin/"))
             # thick_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "thick/"))
-            edge_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "strong_2/"))
+            edge_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "edge/"))
+            strong_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "strong_2/"))
             skeleton_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "skeleton_2/"))
 
             img_train_list = sorted(img_train_list)
@@ -58,6 +59,7 @@ class ISIC_datasets(Dataset):
             # thin_train_list = sorted(thin_train_list)
             # thick_train_list = sorted(thick_train_list)
             edge_train_list = sorted(edge_train_list)
+            strong_train_list = sorted(strong_train_list)
             skeleton_train_list = sorted(skeleton_train_list)
 
             self.data_list = []
@@ -66,12 +68,13 @@ class ISIC_datasets(Dataset):
                mask_train_path = os.path.join(args.data_path, args.dataset, "train/masks/") + mask_train_list[i]
             #    thin_train_path = os.path.join(args.data_path, args.dataset, "thin/") + thin_train_list[i]
             #    thick_train_path = os.path.join(args.data_path, args.dataset, "thick/") + thick_train_list[i]
-               edge_train_path = os.path.join(args.data_path, args.dataset, "strong_2/") + edge_train_list[i]
+               edge_train_path = os.path.join(args.data_path, args.dataset, "edge/") + edge_train_list[i]
+               strong_train_path = os.path.join(args.data_path, args.dataset, "strong_2/") + strong_train_list[i]
                skeleton_train_path = os.path.join(args.data_path, args.dataset, "skeleton_2/") + skeleton_train_list[i]
 
             #    self.data_list.append([img_train_path, mask_train_path])   ## 列表
             #    self.data_list.append([img_train_path, mask_train_path, thin_train_path, thick_train_path])   ## 列表
-               self.data_list.append([img_train_path, mask_train_path, edge_train_path, skeleton_train_path])   ## 列表
+               self.data_list.append([img_train_path, mask_train_path, strong_train_path, skeleton_train_path, edge_train_path])   ## 列表
 
             self.transformer = self.train_transformer
 
@@ -107,18 +110,22 @@ class ISIC_datasets(Dataset):
 
             ## --------------------------------------------------------------------------
 
-            img_path, mask_path, edge_path, skeleton_path = self.data_list[index]
+            img_path, mask_path, strong_path, skeleton_path, edge_path = self.data_list[index]
             
-            edge = cv2.imread(edge_path, cv2.IMREAD_GRAYSCALE)
-            edge = cv2.resize(edge, (self.args.img_size, self.args.img_size))
+            strong = cv2.imread(strong_path, cv2.IMREAD_GRAYSCALE)
+            strong = cv2.resize(strong, (self.args.img_size, self.args.img_size))
             skeleton = cv2.imread(skeleton_path, cv2.IMREAD_GRAYSCALE)
             skeleton = cv2.resize(skeleton, (self.args.img_size, self.args.img_size))
+            edge = cv2.imread(edge_path, cv2.IMREAD_GRAYSCALE)
+            edge = cv2.resize(edge, (self.args.img_size, self.args.img_size))
             
-            edge_ = torch.from_numpy(edge / 255.).unsqueeze_(dim=0).float()
+            strong_ = torch.from_numpy(strong / 255.).unsqueeze_(dim=0).float()
             skeleton_ = torch.from_numpy(skeleton / 255.).unsqueeze_(dim=0).float()
+            edge_ = torch.from_numpy(edge / 255.).unsqueeze_(dim=0).float()
 
-            edge = torch.Tensor(edge_)
+            strong = torch.Tensor(strong_)
             skeleton = torch.Tensor(skeleton_)
+            edge = torch.Tensor(edge_)
         else:
             img_path, mask_path = self.data_list[index]
 
@@ -130,7 +137,7 @@ class ISIC_datasets(Dataset):
 
         if self.train:
             # return img, mask, thin, thick
-            return img, mask, edge, skeleton
+            return img, mask, strong, skeleton, edge
         else:
             return img, mask
         

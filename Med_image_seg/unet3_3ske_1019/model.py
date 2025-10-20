@@ -2,6 +2,7 @@ import os
 from tqdm import tqdm
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 
@@ -11,7 +12,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet3_3ske.network import Multi_decoder_Net
+from Med_image_seg.unet3_3ske_1019.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 # from matplotlib import pyplot as plt
@@ -31,7 +32,7 @@ def arguments():
     return args
 
 
-class unet3_3ske(base_model):
+class unet3_3ske_1019(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -297,7 +298,7 @@ class unet3_3ske(base_model):
         for iter, data in enumerate(train_loader):
             step += iter
             
-            images, targets, ske_strong, ske_alter = data   ## 验证skeleton_1
+            images, targets, ske_strong, ske_alter, edge = data   ## 验证skeleton_1
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
             edge = edge.cuda(non_blocking=True).float()
@@ -309,21 +310,22 @@ class unet3_3ske(base_model):
             loss3 = self.BceDiceLoss(pred_alter, ske_alter)
 
             # 对边界label进行下采样以匹配不同尺度的特征图
-            edge_down_8x = F.interpolate(edge, scale_factor=1/8, mode='bilinear', align_corners=False)  # 匹配x1 [32x32]
-            edge_down_16x = F.interpolate(edge, scale_factor=1/16, mode='bilinear', align_corners=False) # 匹配x2 [16x16]
-            edge_down_32x = F.interpolate(edge, scale_factor=1/32, mode='bilinear', align_corners=False) # 匹配x3 [8x8]
+            edge_256x256 = edge  # [2, 1, 256, 256] - 原始尺寸
+            edge_128x128 = F.interpolate(edge, size=(128, 128), mode='bilinear', align_corners=False)  # [2, 1, 128, 128]
+            edge_64x64 = F.interpolate(edge, size=(64, 64), mode='bilinear', align_corners=False)  # [2, 1, 64, 64]
 
             # 对浅层特征进行卷积调整通道数，然后计算边界损失
             # 你可以根据需要调整这些卷积层
-            if not hasattr(self, 'edge_conv1'):
-                self.edge_conv1 = nn.Conv2d(64, 1, 1).cuda()
-                self.edge_conv2 = nn.Conv2d(128, 1, 1).cuda() 
-                self.edge_conv3 = nn.Conv2d(256, 1, 1).cuda()
+            # if not hasattr(self, 'edge_conv1'):
+            #     self.edge_conv1 = nn.Conv2d(64, 1, 1).cuda()
+            #     self.edge_conv2 = nn.Conv2d(128, 1, 1).cuda() 
+            #     self.edge_conv3 = nn.Conv2d(256, 1, 1).cuda()
+            # print(self.edge_conv1(x1).size())   ## torch.Size([2, 1, 256, 256])
 
             # 计算多尺度边界损失
-            edge_loss1 = self.BceDiceLoss(self.edge_conv1(x1), edge_down_8x)
-            edge_loss2 = self.BceDiceLoss(self.edge_conv2(x2), edge_down_16x) 
-            edge_loss3 = self.BceDiceLoss(self.edge_conv3(x3), edge_down_32x)
+            edge_loss1 = self.BceDiceLoss(x1, edge_256x256)
+            edge_loss2 = self.BceDiceLoss(x2, edge_128x128) 
+            edge_loss3 = self.BceDiceLoss(x3, edge_64x64)
 
             # 组合边界损失
             edge_loss = (edge_loss1 + edge_loss2 + edge_loss3) / 3.0
@@ -385,7 +387,8 @@ class unet3_3ske(base_model):
                 images, targets = data
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
-                preds, pred_strong, pred_alter, pred_edge = self.network(images)
+                # preds, pred_strong, pred_alter, pred_edge = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3 = self.network(images)
                 
                 loss = self.BceDiceLoss(preds, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -456,8 +459,8 @@ class unet3_3ske(base_model):
                 images, targets = data
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
-
-                preds, pred_strong, pred_alter, pred_edge = self.network(images)
+                # preds, pred_strong, pred_alter, pred_edge = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3 = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))

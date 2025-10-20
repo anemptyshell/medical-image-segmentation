@@ -119,6 +119,11 @@ cd ~/mis-ft/medical-image-segmentation
 # python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name unet3_skele --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
 # python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name unet3_skele --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
 
-python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet3_3ske --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
-python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name unet3_3ske --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
-python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name unet3_3ske --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
+# python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet3_3ske --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
+# python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name unet3_3ske --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
+# python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name unet3_3ske --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
+
+
+python main.py --dataset CHASE_DB1 --epochs 200 --phase train --img_size 256 --model_name unet3_3ske_1019 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
+python main.py --dataset DRIVE --epochs 200 --phase train --img_size 256 --model_name unet3_3ske --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
+python main.py --dataset STARE --epochs 200 --phase train --img_size 256 --model_name unet3_3ske --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1

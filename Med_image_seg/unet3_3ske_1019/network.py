@@ -216,8 +216,8 @@ class AuxiliaryHead(nn.Module):
     def forward(self, f_fg, f_bg, f_uc):
         mask_fg = self.branch_fg(f_fg)
         mask_bg = self.branch_bg(f_bg)
-        mask_uc = self.branch_uc(f_uc)
-        return mask_fg, mask_bg, mask_uc
+        # mask_uc = self.branch_uc(f_uc)
+        return mask_fg, mask_bg#, mask_uc
 
 
 
@@ -258,6 +258,10 @@ class Multi_decoder_Net(nn.Module):
 
         self.decouple_layer = DecoupleLayer(1024, 128)
         self.aux_head = AuxiliaryHead(128)
+
+        self.edge_conv1 = nn.Conv2d(64, 1, 1).cuda()
+        self.edge_conv2 = nn.Conv2d(128, 1, 1).cuda() 
+        self.edge_conv3 = nn.Conv2d(256, 1, 1).cuda()
 
 
     # def forward(self, x):
@@ -300,7 +304,11 @@ class Multi_decoder_Net(nn.Module):
         o_seg1 = self.out_1(o_1_1)
     
         ske_strong, ske_alter, ske_edge = self.decouple_layer(x5)                    ## [1, 128, 16, 16]
-        mask_strong, mask_alter, mask_edge = self.aux_head(ske_strong, ske_alter, ske_edge)   ## [1, 1, 256, 256]
+        mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter, ske_edge)   ## [1, 1, 256, 256]
+
+        x1 = self.edge_conv1(x1)
+        x2 = self.edge_conv2(x2)
+        x3 = self.edge_conv3(x3)
     
         # 返回浅层特征用于边界loss计算
         return o_seg1, mask_strong, mask_alter, x1, x2, x3
@@ -310,7 +318,10 @@ class Multi_decoder_Net(nn.Module):
 
 # unet = Multi_decoder_Net(3)
 # a = torch.rand(1, 3, 256, 256)
-# o_seg1, f_fg, f_bg, f_uc= unet.forward(a)
+# o_seg1, f_fg, f_bg, x1, x2, x3= unet.forward(a)
 # print(o_seg1.size())   # torch.Size([1, 1, 256, 256])
 # print(f_fg.size()) 
 # print(f_bg.size()) 
+# print(x1.size())    ## torch.Size([1, 64, 256, 256])
+# print(x2.size())    ## torch.Size([1, 128, 128, 128])
+# print(x3.size())    ## torch.Size([1, 256, 64, 64])
