@@ -50,7 +50,6 @@ class unet3_3ske_1019(base_model):
         self.set_cuda()
         torch.cuda.empty_cache()
 
-
         ######################################################################################
         """ Trainer """ 
         print('#----------Prepareing Model----------#')
