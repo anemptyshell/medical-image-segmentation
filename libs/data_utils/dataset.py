@@ -50,7 +50,7 @@ class ISIC_datasets(Dataset):
             mask_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "train/masks/"))
             # thin_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "thin/"))
             # thick_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "thick/"))
-            edge_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "edge/"))
+            edge_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "skeleton_2/"))
             strong_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "strong_2/"))
             skeleton_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "skeleton_2/"))
 
@@ -68,7 +68,7 @@ class ISIC_datasets(Dataset):
                mask_train_path = os.path.join(args.data_path, args.dataset, "train/masks/") + mask_train_list[i]
             #    thin_train_path = os.path.join(args.data_path, args.dataset, "thin/") + thin_train_list[i]
             #    thick_train_path = os.path.join(args.data_path, args.dataset, "thick/") + thick_train_list[i]
-               edge_train_path = os.path.join(args.data_path, args.dataset, "edge/") + edge_train_list[i]
+               edge_train_path = os.path.join(args.data_path, args.dataset, "skeleton_2/") + edge_train_list[i]
                strong_train_path = os.path.join(args.data_path, args.dataset, "strong_2/") + strong_train_list[i]
                skeleton_train_path = os.path.join(args.data_path, args.dataset, "skeleton_2/") + skeleton_train_list[i]
 

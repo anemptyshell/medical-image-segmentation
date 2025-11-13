@@ -211,7 +211,7 @@ def generate_custom_skeleton_alternative_2(binary_image, aaa=1, bbb=1):
     # custom_skeleton_or = np.logical_or(custom_skeleton_b_and, custom_skeleton_a) 
     difference = np.logical_and(custom_skeleton_a, ~custom_skeleton_b_and.astype(bool))
     
-    return edt, skeleton, difference, custom_skeleton_a
+    return edt, custom_skeleton_b_and, difference, custom_skeleton_a
 
 
 

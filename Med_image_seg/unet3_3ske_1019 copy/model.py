@@ -12,7 +12,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet3_3ske_1020_norm.network import Multi_decoder_Net
+from Med_image_seg.unet3_3ske_1019.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 # from matplotlib import pyplot as plt
@@ -32,7 +32,7 @@ def arguments():
     return args
 
 
-class unet3_3ske_1020_norm(base_model):
+class unet3_3ske_1019(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -49,7 +49,6 @@ class unet3_3ske_1020_norm(base_model):
         # self.set_seed(self.args.seed)
         self.set_cuda()
         torch.cuda.empty_cache()
-
 
         ######################################################################################
         """ Trainer """ 
@@ -179,6 +178,79 @@ class unet3_3ske_1020_norm(base_model):
         return custom_skeleton
 
 
+    def generate_custom_skeleton_alternative_2(binary_image, aaa=1, bbb=1):
+        """
+        根据骨架点处的半径值来调整血管宽度
+        - 半径 < a: 保留原血管 .
+        - 半径 > a: 将血管宽度削减到半径a
+        """
+
+        edt = distance_transform_edt(binary_image)
+        skeleton = skeletonize(binary_image)
+        skeleton_radii = np.where(skeleton, edt, 0)
+
+        # 创建自定义骨架区域
+        custom_skeleton_a = np.zeros_like(binary_image, dtype=bool)
+        custom_skeleton_b = np.zeros_like(binary_image, dtype=bool)
+
+        # 获取所有骨架点坐标和半径
+        y_coords, x_coords = np.where(skeleton)
+        radii = skeleton_radii[skeleton]
+
+        # 创建坐标网格
+        y_grid, x_grid = np.indices(binary_image.shape)
+
+        for y, x, radius in zip(y_coords, x_coords, radii):
+            # 计算图像中每个像素到当前骨架点 (y, x) 的距离。
+            dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+
+            if radius >= aaa:
+                # 半径大于a：创建半径为a的圆形区域
+                circle_region_a = dist_to_center <= aaa
+                custom_skeleton_a = np.logical_or(custom_skeleton_a, circle_region_a)
+
+        # 对于半径<=a的区域，我们直接使用原始血管图像
+        # 但需要确保这些区域不会被过度削减
+        mask_radius_leq_a = np.zeros_like(binary_image, dtype=bool)
+
+        for y, x, radius in zip(y_coords, x_coords, radii):
+            if radius <= aaa:
+                dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+                circle_region = dist_to_center <= radius  # 使用原始半径
+                mask_radius_leq_a = np.logical_or(mask_radius_leq_a, circle_region)
+        """********************************"""
+        for y, x, radius in zip(y_coords, x_coords, radii):
+            # 计算图像中每个像素到当前骨架点 (y, x) 的距离。
+            dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+
+            if radius >= bbb:
+                # 半径大于a：创建半径为a的圆形区域
+                circle_region_b = dist_to_center <= bbb
+                custom_skeleton_b = np.logical_or(custom_skeleton_b, circle_region_b)
+
+        # 对于半径<=a的区域，我们直接使用原始血管图像
+        # 但需要确保这些区域不会被过度削减
+        mask_radius_leq_b = np.zeros_like(binary_image, dtype=bool)
+
+        for y, x, radius in zip(y_coords, x_coords, radii):
+            if radius <= bbb:
+                dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+                circle_region = dist_to_center <= radius  # 使用原始半径
+                mask_radius_leq_b = np.logical_or(mask_radius_leq_b, circle_region)
+
+        # 合并结果：半径<=a的区域 + 半径>a的削减区域
+        custom_skeleton_a = np.logical_or(custom_skeleton_a, mask_radius_leq_a)   ## 强化骨架
+        custom_skeleton_b = np.logical_or(custom_skeleton_b, mask_radius_leq_b) 
+        # 确保不超过原始血管边界
+        custom_skeleton_b_and = np.logical_and(custom_skeleton_b, binary_image.astype(bool))  ## b 自适应 血管延伸方向
+        # custom_skeleton_or = np.logical_or(custom_skeleton_b_and, custom_skeleton_a) 
+        difference = np.logical_and(custom_skeleton_a, ~custom_skeleton_b_and.astype(bool))
+
+        return custom_skeleton_b_and, difference, custom_skeleton_a
+
+
+
+
 
     def train(self, train_loader, test_loader):
         print('#----------Training----------#')
@@ -300,38 +372,32 @@ class unet3_3ske_1020_norm(base_model):
             
             images, targets, ske_strong, ske_alter, edge = data   ## 验证skeleton_1
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
-            ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
-            edge = edge.cuda(non_blocking=True).float()
-            # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-            preds, pred_strong, pred_alter, pred_edge = self.network(images)
+            preds, pred_strong, pred_alter, x1, x2, x3 = self.network(images)
+
+            # 生成自定义骨架（直接在GPU上处理整个batch）
+            ske_alter, edge, ske_strong = torch.stack([
+                self.generate_custom_skeleton_alternative_2(target.squeeze(0), aaa=2, bbb=1)
+                for target in targets
+            ]).unsqueeze(1).float()
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_strong, ske_strong)
             loss3 = self.BceDiceLoss(pred_alter, ske_alter)
-            loss4 = self.BceDiceLoss(pred_edge, edge)
 
             # 对边界label进行下采样以匹配不同尺度的特征图
-            # edge_256x256 = edge  # [2, 1, 256, 256] - 原始尺寸
-            # edge_128x128 = F.interpolate(edge, size=(128, 128), mode='bilinear', align_corners=False)  # [2, 1, 128, 128]
-            # edge_64x64 = F.interpolate(edge, size=(64, 64), mode='bilinear', align_corners=False)  # [2, 1, 64, 64]
+            edge_256x256 = edge  # [2, 1, 256, 256] - 原始尺寸
+            edge_128x128 = F.interpolate(edge, size=(128, 128), mode='bilinear', align_corners=False)  # [2, 1, 128, 128]
+            edge_64x64 = F.interpolate(edge, size=(64, 64), mode='bilinear', align_corners=False)  # [2, 1, 64, 64]
 
-            # 对浅层特征进行卷积调整通道数，然后计算边界损失
-            # 你可以根据需要调整这些卷积层
-            # if not hasattr(self, 'edge_conv1'):
-            #     self.edge_conv1 = nn.Conv2d(64, 1, 1).cuda()
-            #     self.edge_conv2 = nn.Conv2d(128, 1, 1).cuda() 
-            #     self.edge_conv3 = nn.Conv2d(256, 1, 1).cuda()
-            # print(self.edge_conv1(x1).size())   ## torch.Size([2, 1, 256, 256])
 
             # 计算多尺度边界损失
-            # edge_loss1 = self.BceDiceLoss(x1, edge_256x256)
-            # edge_loss2 = self.BceDiceLoss(x2, edge_128x128) 
-            # edge_loss3 = self.BceDiceLoss(x3, edge_64x64)
+            edge_loss1 = self.BceDiceLoss(x1, edge_256x256)
+            edge_loss2 = self.BceDiceLoss(x2, edge_128x128) 
+            edge_loss3 = self.BceDiceLoss(x3, edge_64x64)
 
             # 组合边界损失
-            # edge_loss = (edge_loss1 + edge_loss2 + edge_loss3) / 3.0
-            # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss
-            loss = loss1 + 0.33*loss2 + 0.33*loss3 + 0.33*loss4
+            edge_loss = (edge_loss1 + edge_loss2 + edge_loss3) / 3.0
+            loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss
            
             iou, dice = iou_score(preds, targets)
 
@@ -390,7 +456,7 @@ class unet3_3ske_1020_norm(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, pred_edge = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3 = self.network(images)
                 
                 loss = self.BceDiceLoss(preds, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -462,8 +528,8 @@ class unet3_3ske_1020_norm(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                
+                preds, pred_strong, pred_alter, x1, x2, x3 = self.network(images)
+
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
                 dice_avg_meter.update(dice, images.size(0))
