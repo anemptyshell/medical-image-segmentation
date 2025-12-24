@@ -405,6 +405,55 @@ class Fusion2(nn.Module):
         return correlation.mean(dim=1)  # 返回批次中每个样本的平均相关系数
 
 
+class Fusion2(nn.Module):
+    def __init__(self, channel, ratio):
+        super().__init__()
+
+        self.mlp = nn.Sequential(
+            nn.Linear(3, 8),  # 输入3个统计特征
+            nn.ReLU(),
+            nn.Linear(8, 4),
+            nn.ReLU(),
+            nn.Linear(4, 1),
+            nn.Sigmoid()
+        )
+        self.conv = nn.Sequential(nn.Conv2d(channel // 2, channel // 2, kernel_size=3, padding=1), nn.BatchNorm2d(channel // 2),
+                                  nn.ReLU(inplace=True))
+        self.conv1 = nn.Sequential(nn.Conv2d(channel, channel // 2, kernel_size=3, padding=1),
+                                   nn.BatchNorm2d(channel // 2), nn.ReLU(inplace=True))
+        self.conv2 = nn.Sequential(nn.Conv2d(channel, channel // 2, kernel_size=3, padding=1),
+                                   nn.BatchNorm2d(channel // 2), nn.ReLU(inplace=True))
+        # self.conv3 = nn.Sequential(nn.Conv2d(channel, channel // 2, kernel_size=1))
+        self.conv3 = nn.Sequential(nn.Conv2d(channel // 2, channel // 2, kernel_size=1))
+
+
+    def forward(self, x, y, z):
+        # [1, 128, 16, 16]
+        # 融合特征
+        xy = self.conv1(torch.cat((x, y), 1))
+        yz = self.conv1(torch.cat((y, z), 1))
+        xz = self.conv1(torch.cat((x, z), 1))
+        
+        xy1 = xy      # [1, 64, 16, 16]
+        xy2 = yz
+        xy3 = xz
+
+        result1 = torch.where(xy1 > xy2, xy1, xy2)
+        resultk = torch.where(result1 > xy3, result1, xy3)   # # [1, 64, 16, 16]
+        
+        y_view = y.view(y.shape[0], y.shape[1], -1)   
+        resultk_view = resultk.view(resultk.shape[0], resultk.shape[1], -1)    ## # [1, 64, 256]
+        
+        cosine_sim = F.cosine_similarity(y_view, resultk_view, dim=2).mean(dim=1)   # [1, 64]  [1, 1]
+        sim_features = cosine_sim
+        
+        w = self.mlp(sim_features)    # w: [1, 1] 
+        weighted_y = y * w.view(-1, 1, 1, 1)  # 广播权重到整个特征图 [1, 128, 16, 16]
+
+        output = self.conv3(weighted_y)
+        out = self.conv(output)    # [1, 64, 16, 16]
+        return out
+
 
 
 """unet + 3de + hidi"""
