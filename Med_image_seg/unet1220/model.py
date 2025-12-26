@@ -12,7 +12,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet3_3ske_1019.network import Multi_decoder_Net
+from Med_image_seg.unet1220.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 import numpy as np
@@ -31,7 +31,7 @@ def arguments():
     return args
 
 
-class unet3_3ske_1019(base_model):
+class unet1220(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -377,7 +377,7 @@ class unet3_3ske_1019(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3 = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights = self.network(images)
                 
                 loss = self.BceDiceLoss(preds, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -449,7 +449,7 @@ class unet3_3ske_1019(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3 = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))

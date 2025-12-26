@@ -114,7 +114,7 @@ cd ~/mis-ft/medical-image-segmentation
 # python main.py --dataset DRIVE --epochs 200 --phase train --img_size 256 --model_name unet3_resnet_hidi1 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
 # python main.py --dataset STARE --epochs 200 --phase train --img_size 256 --model_name unet3_resnet_hidi1 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
 
-python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name fang2 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
+# python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name fang2 --batch_size 2 --optimizer_name Adam --print_interval 1 --save_interval 1  --lr 0.0085 --metric_list DSC ACC SEN SPE IoU PRE 
 
 
 # python main.py --dataset CHASE_DB1 --epochs 2 --phase train --img_size 256 --model_name unet3_skele_test --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
@@ -134,3 +134,5 @@ python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --mo
 # python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet3_3ske_1020_norm --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
 # python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name unet3_3ske_1020_norm --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
 # python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name unet3_3ske_1020_norm --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
+
+python main.py --dataset CHASE_DB1 --epochs 300 --phase train --img_size 256 --model_name unet1220 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1
