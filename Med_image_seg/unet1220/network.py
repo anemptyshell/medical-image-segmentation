@@ -153,17 +153,17 @@ class DecoupleLayer(nn.Module):
             CBR(512, out_c, kernel_size=3, padding=1),
             CBR(out_c, out_c, kernel_size=1, padding=0)
         )
-        self.cbr_uc = nn.Sequential(
-            CBR(in_c, 512, kernel_size=3, padding=1),
-            CBR(512, out_c, kernel_size=3, padding=1),
-            CBR(out_c, out_c, kernel_size=1, padding=0)
-        )
+        # self.cbr_uc = nn.Sequential(
+        #     CBR(in_c, 512, kernel_size=3, padding=1),
+        #     CBR(512, out_c, kernel_size=3, padding=1),
+        #     CBR(out_c, out_c, kernel_size=1, padding=0)
+        # )
 
     def forward(self, x):
         f_fg = self.cbr_fg(x)
         f_bg = self.cbr_bg(x)
-        f_uc = self.cbr_uc(x)
-        return f_fg, f_bg, f_uc
+        # f_uc = self.cbr_uc(x)
+        return f_fg, f_bg #, f_uc
 
 
 """Auxiliary Head"""
@@ -199,25 +199,25 @@ class AuxiliaryHead(nn.Module):
             nn.Conv2d(64, 1, kernel_size=1, padding=0),
             nn.Sigmoid()
         )
-        self.branch_uc = nn.Sequential(
-            CBR(in_c, 256, kernel_size=3, padding=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/8
-            CBR(256, 256, kernel_size=3, padding=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/4
-            CBR(256, 128, kernel_size=3, padding=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/2
-            CBR(128, 64, kernel_size=3, padding=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1
-            CBR(64, 64, kernel_size=3, padding=1),
-            nn.Conv2d(64, 1, kernel_size=1, padding=0),
-            nn.Sigmoid()
-        )
+        # self.branch_uc = nn.Sequential(
+        #     CBR(in_c, 256, kernel_size=3, padding=1),
+        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/8
+        #     CBR(256, 256, kernel_size=3, padding=1),
+        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/4
+        #     CBR(256, 128, kernel_size=3, padding=1),
+        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/2
+        #     CBR(128, 64, kernel_size=3, padding=1),
+        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1
+        #     CBR(64, 64, kernel_size=3, padding=1),
+        #     nn.Conv2d(64, 1, kernel_size=1, padding=0),
+        #     nn.Sigmoid()
+        # )
 
-    def forward(self, f_fg, f_bg, f_uc):
+    def forward(self, f_fg, f_bg):
         mask_fg = self.branch_fg(f_fg)
         mask_bg = self.branch_bg(f_bg)
         # mask_uc = self.branch_uc(f_uc)
-        return mask_fg, mask_bg#, mask_uc
+        return mask_fg, mask_bg #, mask_uc
 
 
 
@@ -229,8 +229,8 @@ class Multi_decoder_Net(nn.Module):
         self.bilinear = bilinear
 
         # encoder
-        self.inc = DoubleConv(n_channels, 64)
-        self.down1 = Down(64, 128)
+        self.inc = DoubleConv(n_channels, 64)   ## CBR * 2
+        self.down1 = Down(64, 128)              ## maxpool + CBR*2
         self.down2 = Down(128, 256)
         self.down3 = Down(256, 512)
         self.down4 = Down(512, 1024)
@@ -259,66 +259,60 @@ class Multi_decoder_Net(nn.Module):
         self.decouple_layer = DecoupleLayer(1024, 128)
         self.aux_head = AuxiliaryHead(128)
 
-        self.edge_conv1 = nn.Conv2d(64, 1, 1).cuda()
-        self.edge_conv2 = nn.Conv2d(128, 1, 1).cuda() 
-        self.edge_conv3 = nn.Conv2d(256, 1, 1).cuda()
+        # self.end_conv1 = nn.Conv2d(64, 1, 1).cuda()
+        # self.end_conv2 = nn.Conv2d(128, 1, 1).cuda() 
+        # self.end_conv3 = nn.Conv2d(256, 1, 1).cuda()
+        self.end_conv1 = nn.Conv2d(64, 1, 1)
+        self.end_conv2 = nn.Conv2d(128, 1, 1) 
+        self.end_conv3 = nn.Conv2d(256, 1, 1)
 
+    def _calculate_layer_norm(self, layer):
+        """实时计算层的参数范数"""
+        total_norm = 0.0
+        for param in layer.parameters():
+            if param.requires_grad:
+                total_norm += torch.norm(param).item()
+        return total_norm
 
-    # def forward(self, x):
-    #     # encoder
-    #     x1 = self.inc(x)    ## [1, 64, 256, 256]
-
-    #     x2 = self.down1(x1)  ## [1, 128, 128, 128]
-    #     x3 = self.down2(x2)  ## [1, 256, 64, 64]
-    #     x4 = self.down3(x3)  ## [1, 512, 32, 32]
-    #     x5 = self.down4(x4)  ## [1, 1024, 16, 16]
-
-    #     # decoder
-    #     o_4_1 = self.up1_1(x5, x4)
-
-    #     o_3_1 = self.up2_1(o_4_1, x3)
-
-    #     o_2_1 = self.up3_1(o_3_1, x2)
-
-    #     o_1_1 = self.up4_1(o_2_1, x1)
-
-    #     o_seg1 = self.out_1(o_1_1)
-
-    #     ske_strong, ske_alter, ske_edge = self.decouple_layer(x5)                    ## [1, 128, 16, 16]
-    #     mask_strong, mask_alter, mask_edge = self.aux_head(ske_strong, ske_alter, ske_edge)   ## [1, 1, 256, 256]
-
-    #     return o_seg1, mask_strong, mask_alter, mask_edge
     def forward(self, x):
+        ## x: [bs, 3, 256, 256]
         # encoder
         x1 = self.inc(x)     ## [1, 64, 256, 256]
         x2 = self.down1(x1)  ## [1, 128, 128, 128]
         x3 = self.down2(x2)  ## [1, 256, 64, 64]
         x4 = self.down3(x3)  ## [1, 512, 32, 32]
         x5 = self.down4(x4)  ## [1, 1024, 16, 16]
+
+        norm1 = self._calculate_layer_norm(self.inc)      # x1对应的层
+        norm2 = self._calculate_layer_norm(self.down1)    # x2对应的层  
+        norm3 = self._calculate_layer_norm(self.down2)    # x3对应的层
+
+        norms_tensor = torch.tensor([norm1, norm2, norm3], device=x.device, dtype=x.dtype)
+        norm_weights = norms_tensor / norms_tensor.sum()  # 自动归一化
     
         # decoder
-        o_4_1 = self.up1_1(x5, x4)
-        o_3_1 = self.up2_1(o_4_1, x3)
-        o_2_1 = self.up3_1(o_3_1, x2)
-        o_1_1 = self.up4_1(o_2_1, x1)
-        o_seg1 = self.out_1(o_1_1)
+        o_4_1 = self.up1_1(x5, x4)     ## [1, 512, 32, 32]   
+        o_3_1 = self.up2_1(o_4_1, x3)  ## [1, 256, 64, 64]
+        o_2_1 = self.up3_1(o_3_1, x2)  ## [1, 128, 128, 128]
+        o_1_1 = self.up4_1(o_2_1, x1)  ## [1, 64, 256, 256]
+        o_seg1 = self.out_1(o_1_1)     ## [1, 1, 256, 256]
+
+        ske_strong, ske_alter = self.decouple_layer(x5)                    ## [1, 128, 16, 16]
+        mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter)     ## [1, 1, 256, 256]
+
+        x1 = self.end_conv1(x1)        ## [1, 1, 256, 256]
+        x2 = self.end_conv2(x2)        ## [1, 1, 128, 128]
+        x3 = self.end_conv3(x3)        ## [1, 1, 64, 64]
     
-        ske_strong, ske_alter, ske_edge = self.decouple_layer(x5)                    ## [1, 128, 16, 16]
-        mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter, ske_edge)   ## [1, 1, 256, 256]
-
-        x1 = self.edge_conv1(x1)
-        x2 = self.edge_conv2(x2)
-        x3 = self.edge_conv3(x3)
-    
-        # 返回浅层特征用于边界loss计算
-        return o_seg1, mask_strong, mask_alter, x1, x2, x3
+        # 返回浅层特征用于尾部loss计算
+        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights
 
 
 
 
-# unet = Multi_decoder_Net(3)
-# a = torch.rand(1, 3, 256, 256)
-# o_seg1, f_fg, f_bg, x1, x2, x3= unet.forward(a)
+unet = Multi_decoder_Net(3)
+a = torch.rand(1, 3, 256, 256)
+o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights= unet.forward(a)
 # print(o_seg1.size())   # torch.Size([1, 1, 256, 256])
 # print(f_fg.size()) 
 # print(f_bg.size()) 
