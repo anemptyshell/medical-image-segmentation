@@ -222,6 +222,7 @@ def skeleton_extract(root, a):
 
 
 
+
 if __name__ == '__main__':
     # train_er = "/home/my/data/CHASE_DB1/train/"
     # # edge_extract(train_er)
