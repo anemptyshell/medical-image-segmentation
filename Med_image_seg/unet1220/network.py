@@ -271,7 +271,8 @@ class Multi_decoder_Net(nn.Module):
         total_norm = 0.0
         for param in layer.parameters():
             if param.requires_grad:
-                total_norm += torch.norm(param).item()
+                # total_norm += torch.norm(param).item()
+                total_norm = total_norm + torch.norm(param)
         return total_norm
 
     def forward(self, x):
