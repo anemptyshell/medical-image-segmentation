@@ -271,39 +271,39 @@ class Multi_decoder_Net(nn.Module):
         total_norm = 0.0
         for param in layer.parameters():
             if param.requires_grad:
-                total_norm += torch.norm(param).item()
+                # total_norm += torch.norm(param).item()
+                total_norm = total_norm + torch.norm(param)
         return total_norm
 
     def forward(self, x):
         ## x: [bs, 3, 256, 256]
         # encoder
-        x1 = self.inc(x)     ## [1, 64, 256, 256]
-        x2 = self.down1(x1)  ## [1, 128, 128, 128]
-        x3 = self.down2(x2)  ## [1, 256, 64, 64]
-        x4 = self.down3(x3)  ## [1, 512, 32, 32]
-        x5 = self.down4(x4)  ## [1, 1024, 16, 16]
-
+        x1 = self.inc(x)                                  ## [bs, 64, 256, 256]
+        x2 = self.down1(x1)                               ## [bs, 128, 128, 128]
+        x3 = self.down2(x2)                               ## [bs, 256, 64, 64]
+        x4 = self.down3(x3)                               ## [bs, 512, 32, 32]
+        x5 = self.down4(x4)                               ## [bs, 1024, 16, 16]
         norm1 = self._calculate_layer_norm(self.inc)      # x1对应的层
         norm2 = self._calculate_layer_norm(self.down1)    # x2对应的层  
         norm3 = self._calculate_layer_norm(self.down2)    # x3对应的层
 
         norms_tensor = torch.tensor([norm1, norm2, norm3], device=x.device, dtype=x.dtype)
-        norm_weights = norms_tensor / norms_tensor.sum()  # 自动归一化
+        norm_weights = norms_tensor / norms_tensor.sum()  
     
         # decoder
-        o_4_1 = self.up1_1(x5, x4)     ## [1, 512, 32, 32]   
-        o_3_1 = self.up2_1(o_4_1, x3)  ## [1, 256, 64, 64]
-        o_2_1 = self.up3_1(o_3_1, x2)  ## [1, 128, 128, 128]
-        o_1_1 = self.up4_1(o_2_1, x1)  ## [1, 64, 256, 256]
-        o_seg1 = self.out_1(o_1_1)     ## [1, 1, 256, 256]
+        o_4_1 = self.up1_1(x5, x4)                        ## [bs, 512, 32, 32]   
+        o_3_1 = self.up2_1(o_4_1, x3)                     ## [bs, 256, 64, 64]
+        o_2_1 = self.up3_1(o_3_1, x2)                     ## [bs, 128, 128, 128]
+        o_1_1 = self.up4_1(o_2_1, x1)                     ## [bs, 64, 256, 256]
+        o_seg1 = self.out_1(o_1_1)                        ## [bs, 1, 256, 256]
 
-        ske_strong, ske_alter = self.decouple_layer(x5)                    ## [1, 128, 16, 16]
-        mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter)     ## [1, 1, 256, 256]
+        ske_strong, ske_alter = self.decouple_layer(x5)                    ## [bs, 128, 16, 16]
+        mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter)     ## [bs, 1, 256, 256]
 
-        x1 = self.end_conv1(x1)        ## [1, 1, 256, 256]
-        x2 = self.end_conv2(x2)        ## [1, 1, 128, 128]
-        x3 = self.end_conv3(x3)        ## [1, 1, 64, 64]
-    
+        x1 = self.end_conv1(x1)        ## [bs, 1, 256, 256]
+        x2 = self.end_conv2(x2)        ## [bs, 1, 128, 128]
+        x3 = self.end_conv3(x3)        ## [bs, 1, 64, 64]
+
         # 返回浅层特征用于尾部loss计算
         return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights
 
