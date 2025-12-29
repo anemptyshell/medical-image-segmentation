@@ -208,7 +208,7 @@ logging.basicConfig(
 
 
 class Fusion1(nn.Module):  
-    def __init__(self, channel, ratio):
+    def __init__(self, channel=2, ratio=1):
         super().__init__()
 
         self.mlp = nn.Sequential(
@@ -240,49 +240,21 @@ class Fusion1(nn.Module):
         xy3 = xz
     
         # 创建堆叠的张量以便找到最大值索引
-        stacked = torch.stack([xy1, xy2, xy3], dim=0)  # [3, batch, channel, H, W]
+        stacked = torch.stack([xy1, xy2, xy3], dim=0)       # [3, bs, 1, 256, 256]
         
-        # 找到最大值和对应的索引
-        max_vals, max_indices = torch.max(stacked, dim=0)
+        max_vals, max_indices = torch.max(stacked, dim=0)   ## [bs, 1, 256, 256] (三个融合中的最大值)
+        
+        resultk = max_vals         ## [bs, 1, 256, 256]
 
-        # 创建掩码：当 max_indices != 2 时为 1，否则为 0
-        mask = (max_indices != 2).float()  # [batch, channel, H, W]
+        y_view = y.view(y.shape[0], y.shape[1], -1)                           ## [bs, 1, 65536] 
+        resultk_view = resultk.view(resultk.shape[0], resultk.shape[1], -1)   ## [bs, 1, 65536]
+        sim = F.cosine_similarity(y_view, resultk_view, dim=2)                ## 在dim=2上计算，输出: [bs, 1]
+        w = self.mlp(sim)          ##  [bs, 1] 
+        w = F.softmax(w, dim=-1)   ##  [bs, 1] 
+        output = self.conv3(y * w.unsqueeze(-2).unsqueeze(-1).expand_as(y))   ## [bs, 1, 256, 256]
+        out = self.conv(output)    ## [bs, 1, 256, 256]
 
-        # 0: 来自 xy1
-        # 1: 来自 xy2  
-        # 2: 来自 xy3
-        
-        total_pixels = max_indices.numel()
-        count_xy1 = (max_indices == 0).sum().item()
-        count_xy2 = (max_indices == 1).sum().item()
-        count_xy3 = (max_indices == 2).sum().item()
-            
-        # 计算百分比
-        perc_xy1 = count_xy1 / total_pixels * 100
-        perc_xy2 = count_xy2 / total_pixels * 100
-        perc_xy3 = count_xy3 / total_pixels * 100
-        
-        # 保存到日志
-        logging.info(f"Forward pass {self.forward_count}:")
-        logging.info(f"  来自 xy1 的像素数: {count_xy1} ({perc_xy1:.2f}%)")
-        logging.info(f"  来自 xy2 的像素数: {count_xy2} ({perc_xy2:.2f}%)")
-        logging.info(f"  来自 xy3 的像素数: {count_xy3} ({perc_xy3:.2f}%)")
-        logging.info(f"  总像素数: {total_pixels}")
-        
-        # 同时在控制台输出（可选）
-        # print(f"Forward {self.forward_count}: xy1={perc_xy1:.1f}%, xy2={perc_xy2:.1f}%, xy3={perc_xy3:.1f}%")
-        
-        resultk = max_vals  
-
-        y_view = y.view(y.shape[0], y.shape[1], -1)
-        resultk_view = resultk.view(resultk.shape[0], resultk.shape[1], -1)
-        sim = F.cosine_similarity(y_view, resultk_view, dim=2)
-        w = self.mlp(sim)
-        w = F.softmax(w, dim=-1)
-        output = self.conv3(y * w.unsqueeze(-2).unsqueeze(-1).expand_as(y))
-        out = self.conv(output)
-
-        return out, mask  # 返回输出和掩码
+        return out
 
 
 

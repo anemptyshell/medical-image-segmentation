@@ -300,7 +300,7 @@ class unet1221(base_model):
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
             edge = edge.cuda(non_blocking=True).float()
-            preds, pred_strong, pred_alter, x1, x2, x3, norm_weights = self.network(images)
+            preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_strong, ske_strong)
@@ -318,7 +318,10 @@ class unet1221(base_model):
 
             # 组合尾部损失
             edge_loss = norm_weights[0] * edge_loss1 + norm_weights[1] * edge_loss2 + norm_weights[2] * edge_loss3
-            loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss
+
+            loss_complement = self.BceDiceLoss(complement, 1-targets)
+
+            loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement
            
             iou, dice = iou_score(preds, targets)
 
@@ -377,7 +380,7 @@ class unet1221(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
                 
                 loss = self.BceDiceLoss(preds, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -449,7 +452,7 @@ class unet1221(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))

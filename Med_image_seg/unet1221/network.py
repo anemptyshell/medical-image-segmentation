@@ -139,7 +139,6 @@ class CBR(nn.Module):
 
 
 """Decouple Layer"""
-
 class DecoupleLayer(nn.Module):
     def __init__(self, in_c=1024, out_c=256):
         super(DecoupleLayer, self).__init__()
@@ -167,8 +166,6 @@ class DecoupleLayer(nn.Module):
 
 
 """Auxiliary Head"""
-
-
 class AuxiliaryHead(nn.Module):
     def __init__(self, in_c):
         super(AuxiliaryHead, self).__init__()
@@ -220,6 +217,131 @@ class AuxiliaryHead(nn.Module):
         return mask_fg, mask_bg #, mask_uc
 
 
+class EnhancedFusionWithSqueeze(nn.Module):
+    """使用squeeze处理单通道特征的融合模块"""
+    def __init__(self, input_channels=1, hidden_channels=32):
+        super().__init__()
+        
+        # 融合卷积
+        self.fuse_conv1 = nn.Sequential(
+            nn.Conv2d(input_channels * 2, hidden_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(hidden_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden_channels, input_channels, kernel_size=3, padding=1)
+        )
+        self.fuse_conv2 = nn.Sequential(
+            nn.Conv2d(input_channels * 2, hidden_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(hidden_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden_channels, input_channels, kernel_size=3, padding=1)
+        )
+        # 相似度计算网络（处理2D特征图）
+        self.similarity_net = nn.Sequential(
+            nn.Conv2d(2, 16, kernel_size=3, padding=1),  # 输入两个2D特征图
+            nn.ReLU(),
+            nn.Conv2d(16, 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(8, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
+    
+    def _compute_spatial_similarity(self, feat1, feat2, method='conv'):
+        """
+        计算两个2D特征图的空间相似度
+        
+        Args:
+            feat1: [bs, h, w] (squeezed)
+            feat2: [bs, h, w] (squeezed)
+            method: 计算方法
+            
+        Returns:
+            sim_map: [bs, 1, h, w] (重新添加通道维度)
+        """
+        bs, h, w = feat1.shape
+        
+        if method == 'conv':
+            # 使用卷积网络学习相似度关系
+            # 需要添加通道维度 [bs, h, w] -> [bs, 1, h, w]
+            feat1_unsqueeze = feat1.unsqueeze(1)  # [bs, 1, h, w]
+            feat2_unsqueeze = feat2.unsqueeze(1)  # [bs, 1, h, w]
+            
+            combined = torch.cat([feat1_unsqueeze, feat2_unsqueeze], dim=1)  # [bs, 2, h, w]
+            sim_map = self.similarity_net(combined)  # [bs, 1, h, w]
+            
+        elif method == 'local_correlation':
+            # 计算局部相关性
+            # 标准化
+            feat1_norm = (feat1 - feat1.mean(dim=(1,2), keepdim=True)) / (feat1.std(dim=(1,2), keepdim=True) + 1e-8)
+            feat2_norm = (feat2 - feat2.mean(dim=(1,2), keepdim=True)) / (feat2.std(dim=(1,2), keepdim=True) + 1e-8)
+            
+            # 使用3x3卷积计算局部均值
+            kernel = torch.ones(1, 1, 3, 3, device=feat1.device) / 9.0
+            
+            # 需要先添加通道维度
+            feat1_norm_unsq = feat1_norm.unsqueeze(1)  # [bs, 1, h, w]
+            feat2_norm_unsq = feat2_norm.unsqueeze(1)  # [bs, 1, h, w]
+            
+            local_mean1 = F.conv2d(feat1_norm_unsq, kernel, padding=1)
+            local_mean2 = F.conv2d(feat2_norm_unsq, kernel, padding=1)
+            
+            # 局部协方差
+            local_cov = F.conv2d(feat1_norm_unsq * feat2_norm_unsq, kernel, padding=1) - local_mean1 * local_mean2
+            
+            # 局部标准差
+            local_std1 = torch.sqrt(F.conv2d(feat1_norm_unsq**2, kernel, padding=1) - local_mean1**2 + 1e-8)
+            local_std2 = torch.sqrt(F.conv2d(feat2_norm_unsq**2, kernel, padding=1) - local_mean2**2 + 1e-8)
+            
+            # 局部相关系数
+            sim_map = local_cov / (local_std1 * local_std2 + 1e-8)
+            sim_map = (sim_map + 1.0) / 2.0  # 映射到[0, 1]
+            
+        elif method == 'inverse_diff':
+            # 基于差异的相似度
+            diff = torch.abs(feat1 - feat2)  # [bs, h, w]
+            sim_map = 1.0 / (1.0 + diff)     # [bs, h, w]
+            sim_map = sim_map.unsqueeze(1)   # [bs, 1, h, w]
+            
+        return sim_map
+    
+    def forward(self, preds, preds_strong, preds_alter):
+        """
+            preds: [bs, 1, h, w]
+            preds_strong: [bs, 1, h, w]
+            preds_alter: [bs, 1, h, w]
+        """
+        bs, c, h, w = preds.shape
+        
+        # 1. 融合
+        fused_strong = self.fuse_conv1(torch.cat([preds, preds_strong], dim=1))
+        fused_alter = self.fuse_conv2(torch.cat([preds, preds_alter], dim=1))
+        
+        # 2. 使用squeeze去掉通道维度，计算空间相似度
+        preds_squeezed = preds.squeeze(1)                # [bs, h, w]
+        fused_strong_squeezed = fused_strong.squeeze(1)  # [bs, h, w]
+        fused_alter_squeezed = fused_alter.squeeze(1)    # [bs, h, w]
+        
+        # 计算相似度图
+        sim_map1 = self._compute_spatial_similarity(
+            fused_strong_squeezed, preds_squeezed, method='conv'
+        )  # [bs, 1, h, w]
+        
+        sim_map2 = self._compute_spatial_similarity(
+            fused_alter_squeezed, preds_squeezed, method='conv'
+        )  # [bs, 1, h, w]
+        
+        # 3. 选择策略得到权重
+        # 方法A：取最大值
+        w = torch.max(sim_map1, sim_map2)  # [bs, 1, h, w]
+        # 方法B：加权平均
+        # w = 0.6 * sim_map1 + 0.4 * sim_map2
+        
+        # 4. 计算补集并加权
+        complement = 1.0 - preds  # [bs, 1, h, w]
+        complement_weighted = complement * w  # [bs, 1, h, w]
+        
+        return w, complement_weighted
+
+
 
 class Multi_decoder_Net(nn.Module):
     def __init__(self, n_channels, n_classes=1, bilinear=False):
@@ -266,6 +388,8 @@ class Multi_decoder_Net(nn.Module):
         self.end_conv2 = nn.Conv2d(128, 1, 1) 
         self.end_conv3 = nn.Conv2d(256, 1, 1)
 
+        self.fusion = EnhancedFusionWithSqueeze()
+
     def _calculate_layer_norm(self, layer):
         """实时计算层的参数范数"""
         total_norm = 0.0
@@ -299,23 +423,25 @@ class Multi_decoder_Net(nn.Module):
 
         ske_strong, ske_alter = self.decouple_layer(x5)                    ## [bs, 128, 16, 16]
         mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter)     ## [bs, 1, 256, 256]
+        w, complement_weighted = self.fusion(o_seg1, mask_strong, mask_alter)
 
         x1 = self.end_conv1(x1)        ## [bs, 1, 256, 256]
         x2 = self.end_conv2(x2)        ## [bs, 1, 128, 128]
         x3 = self.end_conv3(x3)        ## [bs, 1, 64, 64]
 
         # 返回浅层特征用于尾部loss计算
-        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights
+        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights, complement_weighted
 
 
 
 
 # unet = Multi_decoder_Net(3)
 # a = torch.rand(1, 3, 256, 256)
-# o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights= unet.forward(a)
-# print(o_seg1.size())   # torch.Size([1, 1, 256, 256])
-# print(f_fg.size()) 
-# print(f_bg.size()) 
-# print(x1.size())    ## torch.Size([1, 64, 256, 256])
-# print(x2.size())    ## torch.Size([1, 128, 128, 128])
-# print(x3.size())    ## torch.Size([1, 256, 64, 64])
+# o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, complement= unet.forward(a)
+# print(o_seg1.size())        # torch.Size([1, 1, 256, 256])
+# print(f_fg.size())  
+# print(f_bg.size())  
+# print(x1.size())            # torch.Size([1, 1, 256, 256])
+# print(x2.size())            # torch.Size([1, 1, 128, 128])
+# print(x3.size())            # torch.Size([1, 1, 64, 64])
+# print(complement.size())    # torch.Size([1, 1, 256, 256])
