@@ -430,14 +430,14 @@ class Multi_decoder_Net(nn.Module):
         x3 = self.end_conv3(x3)        ## [bs, 1, 64, 64]
 
         # 返回浅层特征用于尾部loss计算
-        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights, complement_weighted
+        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights, w, complement_weighted
 
 
 
 
 # unet = Multi_decoder_Net(3)
 # a = torch.rand(1, 3, 256, 256)
-# o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, complement= unet.forward(a)
+# o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, w, complement= unet.forward(a)
 # print(o_seg1.size())        # torch.Size([1, 1, 256, 256])
 # print(f_fg.size())  
 # print(f_bg.size())  

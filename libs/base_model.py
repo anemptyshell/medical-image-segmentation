@@ -65,7 +65,7 @@ class base_model(nn.Module):
 
     def make_dir(self, parser):
 
-        self.work_dir = os.path.join(self.args.output, "Med_image_seg", self.args.model_name, self.args.dataset)
+        self.work_dir = os.path.join(self.args.output, "Med_image_seg", self.args.model_name, self.args.output_end, self.args.dataset)
         # self.work_dir = os.path.join(self.args.output, self.args.model_name, self.args.dataset)
         self.log_dir = os.path.join(self.work_dir, "logs")
         self.res_dir = os.path.join(self.work_dir, "results")

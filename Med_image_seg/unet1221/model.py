@@ -323,7 +323,7 @@ class unet1221(base_model):
 
             loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement
            
-            iou, dice = iou_score(preds, targets)
+            iou, dice = iou_score(1-complement, targets)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -382,9 +382,9 @@ class unet1221(base_model):
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
                 preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
                 
-                loss = self.BceDiceLoss(preds, targets)
+                loss = self.BceDiceLoss(1-complement, targets)
                 # iou, dice = iou_score(preds, targets)
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(preds, targets, epoch)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(1-complement, targets, epoch)
 
                 avg_meters['loss'].update(loss.item(), images.size(0))
                 avg_meters['iou'].update(iou, images.size(0))
@@ -454,7 +454,7 @@ class unet1221(base_model):
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
                 preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
 
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(1-complement, targets)
                 iou_avg_meter.update(iou, images.size(0))
                 dice_avg_meter.update(dice, images.size(0))
                 hd_avg_meter.update(hd, images.size(0))
@@ -465,7 +465,7 @@ class unet1221(base_model):
                 sensitivity_avg_meter.update(sensitivity, images.size(0))
 
                 ################################################ 
-                output = F.sigmoid(preds)
+                output = F.sigmoid(1-complement)
                 output_ = torch.where(output>0.5,1,0)
                 gt_ = torch.where(targets>0.5,1,0)
                 pred_np = output_.squeeze().cpu().numpy()
@@ -484,6 +484,14 @@ class unet1221(base_model):
                     preds = np.squeeze(preds, axis=0)
                     preds = np.squeeze(preds, axis=0)
 
+
+                    w = torch.sigmoid(w).cpu().numpy()
+                    # w = w.cpu().numpy()
+                    # w[w >= 0.5] = 1
+                    # w[w < 0.5] = 0
+                    w = np.squeeze(w, axis=0)
+                    w = np.squeeze(w, axis=0)
+
                     plt.figure(figsize=(size,size),dpi=100)
                     plt.gca().xaxis.set_major_locator(plt.NullLocator())
                     plt.gca().yaxis.set_major_locator(plt.NullLocator())
@@ -493,6 +501,17 @@ class unet1221(base_model):
                     plt.imshow(preds, cmap='gray')  
                     plt.axis('off')  # 关闭坐标轴
                     plt.savefig(self.args.res_dir +'/'+ str(iter) +'.png')
+                    plt.close()
+
+                    plt.figure(figsize=(size,size),dpi=100)
+                    plt.gca().xaxis.set_major_locator(plt.NullLocator())
+                    plt.gca().yaxis.set_major_locator(plt.NullLocator())
+                    plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+                    plt.margins(0,0)
+
+                    plt.imshow(w)  
+                    plt.axis('off')  # 关闭坐标轴
+                    plt.savefig(self.args.res_dir +'/'+ str(iter) +'w.png')
                     plt.close()
 
 

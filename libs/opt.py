@@ -17,6 +17,7 @@ class options:
         self.parser.add_argument("--val_interval", type=int, default=20)
 
         self.parser.add_argument("--output", type=str, default="../output_0818")
+        self.parser.add_argument("--output_end", type=str, default="1")
         self.parser.add_argument("--dataset", default="isic2017", help="Dataset name to use")
 
         ## optimizer

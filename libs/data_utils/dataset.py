@@ -5,6 +5,7 @@ from sklearn.cluster import KMeans
 import numpy as np
 from torch.utils.data import Dataset
 from libs.data_utils.transform import get_transform, default_DRIVE_loader,img_PreProc_er, default_DRIVE_loader_01
+# from libs.data_utils.transform_v2 import get_transform_v2
 import torch.utils.data as data
 import torchvision.transforms as transforms
 import cv2
