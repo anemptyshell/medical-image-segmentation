@@ -336,8 +336,9 @@ class EnhancedFusionWithSqueeze(nn.Module):
         # w = 0.6 * sim_map1 + 0.4 * sim_map2
         
         # 4. 计算补集并加权
-        complement = 1.0 - preds  # [bs, 1, h, w]
-        complement_weighted = complement * w  # [bs, 1, h, w]
+        complement = 1.0 - preds                # [bs, 1, h, w]
+        complement_weighted = complement * w    # [bs, 1, h, w]
+        complement_weighted += preds    ## 此处改动记为add
         
         return w, complement_weighted
 
