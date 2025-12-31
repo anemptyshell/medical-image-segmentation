@@ -380,11 +380,11 @@ class unet1231(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement_out, loss_mi = self.network(images)
                 
-                loss = self.BceDiceLoss(1-complement, targets)
+                loss = self.BceDiceLoss(1-complement_out, targets)
                 # iou, dice = iou_score(preds, targets)
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(1-complement, targets, epoch)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(1-complement_out, targets, epoch)
 
                 avg_meters['loss'].update(loss.item(), images.size(0))
                 avg_meters['iou'].update(iou, images.size(0))
@@ -452,9 +452,9 @@ class unet1231(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement_out, loss_mi = self.network(images)
 
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(1-complement, targets)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(1-complement_out, targets)
                 iou_avg_meter.update(iou, images.size(0))
                 dice_avg_meter.update(dice, images.size(0))
                 hd_avg_meter.update(hd, images.size(0))
@@ -465,7 +465,7 @@ class unet1231(base_model):
                 sensitivity_avg_meter.update(sensitivity, images.size(0))
 
                 ################################################ 
-                output = F.sigmoid(1-complement)
+                output = F.sigmoid(1-complement_out)
                 output_ = torch.where(output>0.5,1,0)
                 gt_ = torch.where(targets>0.5,1,0)
                 pred_np = output_.squeeze().cpu().numpy()
