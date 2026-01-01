@@ -331,15 +331,15 @@ class EnhancedFusionWithSqueeze(nn.Module):
         
         # 3. 选择策略得到权重
         # 方法A：取最大值
-        w = torch.max(sim_map1, sim_map2)  # [bs, 1, h, w]
+        # w = torch.max(sim_map1, sim_map2)  # [bs, 1, h, w]
         # 方法B：加权平均
-        # w = 0.6 * sim_map1 + 0.4 * sim_map2
+        w = 0.6 * sim_map1 + 0.4 * sim_map2   ## 此处改动记为w_avg
         
         # 4. 计算补集并加权
         complement = 1.0 - preds                # [bs, 1, h, w]
         complement_weighted = complement * w    # [bs, 1, h, w]
-        # complement_weighted += preds      ## 此处改动记为add   效果很差 几乎为0
-        complement_weighted += complement   ## 此处改动记为add1  指标提升，但w可视化几乎没有
+        # complement_weighted += preds          ## 此处改动记为add   效果很差 几乎为0
+        complement_weighted += complement       ## 此处改动记为add1  指标提升，但w可视化几乎没有
         return w, complement_weighted
 
 
