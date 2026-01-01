@@ -217,130 +217,105 @@ class AuxiliaryHead(nn.Module):
         return mask_fg, mask_bg #, mask_uc
 
 
-class EnhancedFusionWithSqueeze(nn.Module):
-    """使用squeeze处理单通道特征的融合模块"""
+
+class UncertaintyAwareFusion(nn.Module):
+    """不确定性感知融合模块"""
     def __init__(self, input_channels=1, hidden_channels=32):
         super().__init__()
         
-        # 融合卷积
-        self.fuse_conv1 = nn.Sequential(
-            nn.Conv2d(input_channels * 2, hidden_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(hidden_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_channels, input_channels, kernel_size=3, padding=1)
-        )
-        self.fuse_conv2 = nn.Sequential(
-            nn.Conv2d(input_channels * 2, hidden_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(hidden_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_channels, input_channels, kernel_size=3, padding=1)
-        )
-        # 相似度计算网络（处理2D特征图）
-        self.similarity_net = nn.Sequential(
-            nn.Conv2d(2, 16, kernel_size=3, padding=1),  # 输入两个2D特征图
+        # 1. 特征融合网络
+        self.fusion_net = nn.Sequential(
+            nn.Conv2d(input_channels * 3, hidden_channels, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(16, 8, kernel_size=3, padding=1),
+            nn.Conv2d(hidden_channels, hidden_channels // 2, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(8, 1, kernel_size=1),
-            nn.Sigmoid()
+            nn.Conv2d(hidden_channels // 2, input_channels, kernel_size=1)
+        )
+        
+        # 2. 不确定性估计网络
+        self.uncertainty_estimator = nn.Sequential(
+            nn.Conv2d(input_channels * 3, hidden_channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(hidden_channels, hidden_channels // 2, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(hidden_channels // 2, 1, kernel_size=1),
+            nn.Sigmoid()  # 输出0-1的不确定性权重
+        )
+        
+        # 3. 差异计算卷积（用于计算预测间的不一致性）
+        self.diff_conv = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 1, kernel_size=1)
         )
     
-    def _compute_spatial_similarity(self, feat1, feat2, method='conv'):
-        """
-        计算两个2D特征图的空间相似度
+    def _compute_predictions_disagreement(self, preds, preds_strong, preds_alter):
+        """计算三个预测之间的不一致性"""
+        # 计算两两之间的绝对差异
+        diff_strong = torch.abs(preds - preds_strong)  # [bs, 1, h, w]
+        diff_alter = torch.abs(preds - preds_alter)    # [bs, 1, h, w]
+        diff_cross = torch.abs(preds_strong - preds_alter)  # [bs, 1, h, w]
         
-        Args:
-            feat1: [bs, h, w] (squeezed)
-            feat2: [bs, h, w] (squeezed)
-            method: 计算方法
-            
-        Returns:
-            sim_map: [bs, 1, h, w] (重新添加通道维度)
-        """
-        bs, h, w = feat1.shape
+        # 拼接差异图
+        diff_concat = torch.cat([diff_strong, diff_alter, diff_cross], dim=1)  # [bs, 3, h, w]
         
-        if method == 'conv':
-            # 使用卷积网络学习相似度关系
-            # 需要添加通道维度 [bs, h, w] -> [bs, 1, h, w]
-            feat1_unsqueeze = feat1.unsqueeze(1)  # [bs, 1, h, w]
-            feat2_unsqueeze = feat2.unsqueeze(1)  # [bs, 1, h, w]
-            
-            combined = torch.cat([feat1_unsqueeze, feat2_unsqueeze], dim=1)  # [bs, 2, h, w]
-            sim_map = self.similarity_net(combined)  # [bs, 1, h, w]
-            
-        elif method == 'local_correlation':
-            # 计算局部相关性
-            # 标准化
-            feat1_norm = (feat1 - feat1.mean(dim=(1,2), keepdim=True)) / (feat1.std(dim=(1,2), keepdim=True) + 1e-8)
-            feat2_norm = (feat2 - feat2.mean(dim=(1,2), keepdim=True)) / (feat2.std(dim=(1,2), keepdim=True) + 1e-8)
-            
-            # 使用3x3卷积计算局部均值
-            kernel = torch.ones(1, 1, 3, 3, device=feat1.device) / 9.0
-            
-            # 需要先添加通道维度
-            feat1_norm_unsq = feat1_norm.unsqueeze(1)  # [bs, 1, h, w]
-            feat2_norm_unsq = feat2_norm.unsqueeze(1)  # [bs, 1, h, w]
-            
-            local_mean1 = F.conv2d(feat1_norm_unsq, kernel, padding=1)
-            local_mean2 = F.conv2d(feat2_norm_unsq, kernel, padding=1)
-            
-            # 局部协方差
-            local_cov = F.conv2d(feat1_norm_unsq * feat2_norm_unsq, kernel, padding=1) - local_mean1 * local_mean2
-            
-            # 局部标准差
-            local_std1 = torch.sqrt(F.conv2d(feat1_norm_unsq**2, kernel, padding=1) - local_mean1**2 + 1e-8)
-            local_std2 = torch.sqrt(F.conv2d(feat2_norm_unsq**2, kernel, padding=1) - local_mean2**2 + 1e-8)
-            
-            # 局部相关系数
-            sim_map = local_cov / (local_std1 * local_std2 + 1e-8)
-            sim_map = (sim_map + 1.0) / 2.0  # 映射到[0, 1]
-            
-        elif method == 'inverse_diff':
-            # 基于差异的相似度
-            diff = torch.abs(feat1 - feat2)  # [bs, h, w]
-            sim_map = 1.0 / (1.0 + diff)     # [bs, h, w]
-            sim_map = sim_map.unsqueeze(1)   # [bs, 1, h, w]
-            
-        return sim_map
+        # 通过卷积网络计算综合不一致性
+        disagreement = self.diff_conv(diff_concat)  # [bs, 1, h, w]
+        
+        return disagreement
+    
+    def _compute_confidence_based_uncertainty(self, preds, preds_strong, preds_alter):
+        """基于置信度的不确定性估计"""
+        # 对于二分类，预测值接近0.5时最不确定
+        uncertainty_preds = 4.0 * preds * (1.0 - preds)  # 二次函数，0.5时最大为1.0
+        uncertainty_strong = 4.0 * preds_strong * (1.0 - preds_strong)
+        uncertainty_alter = 4.0 * preds_alter * (1.0 - preds_alter)
+        
+        # 平均不确定性
+        avg_uncertainty = (uncertainty_preds + uncertainty_strong + uncertainty_alter) / 3.0
+        
+        return avg_uncertainty
     
     def forward(self, preds, preds_strong, preds_alter):
         """
-            preds: [bs, 1, h, w]
-            preds_strong: [bs, 1, h, w]
-            preds_alter: [bs, 1, h, w]
+        识别预测中的不确定区域
+        
+        Args:
+            preds: 主分割预测 [bs, 1, h, w]
+            preds_strong: 强化骨架预测 [bs, 1, h, w]
+            preds_alter: 延伸骨架预测 [bs, 1, h, w]
+            
+        Returns:
+            uncertainty_weights: 不确定性权重图 [bs, 1, h, w] (值越大越不确定)
+            fused_features: 融合后的特征 [bs, 1, h, w]
         """
         bs, c, h, w = preds.shape
         
-        # 1. 融合
-        fused_strong = self.fuse_conv1(torch.cat([preds, preds_strong], dim=1))
-        fused_alter = self.fuse_conv2(torch.cat([preds, preds_alter], dim=1))
+        # 1. 计算预测间的不一致性（差异越大，越不确定）
+        disagreement = self._compute_predictions_disagreement(preds, preds_strong, preds_alter)
         
-        # 2. 使用squeeze去掉通道维度，计算空间相似度
-        preds_squeezed = preds.squeeze(1)                # [bs, h, w]
-        fused_strong_squeezed = fused_strong.squeeze(1)  # [bs, h, w]
-        fused_alter_squeezed = fused_alter.squeeze(1)    # [bs, h, w]
+        # 2. 计算置信度不确定性（预测值接近0.5时最不确定）
+        confidence_uncertainty = self._compute_confidence_based_uncertainty(
+            preds, preds_strong, preds_alter
+        )
         
-        # 计算相似度图
-        sim_map1 = self._compute_spatial_similarity(
-            fused_strong_squeezed, preds_squeezed, method='conv'
-        )  # [bs, 1, h, w]
+        # 3. 拼接所有信息
+        combined_input = torch.cat([preds, preds_strong, preds_alter], dim=1)  # [bs, 3, h, w]
         
-        sim_map2 = self._compute_spatial_similarity(
-            fused_alter_squeezed, preds_squeezed, method='conv'
-        )  # [bs, 1, h, w]
+        # 4. 通过神经网络学习不确定性（结合多种线索）
+        learned_uncertainty = self.uncertainty_estimator(combined_input)  # [bs, 1, h, w]
         
-        # 3. 选择策略得到权重
-        # 方法A：取最大值
-        w = torch.max(sim_map1, sim_map2)  # [bs, 1, h, w]
-        # 方法B：加权平均
-        # w = 0.6 * sim_map1 + 0.4 * sim_map2     ## 此处改动记为w_avg（在add1基础上改的）  效果相比add1提升一点点
+        # 5. 综合不确定性（加权组合）
+        # 不一致性 + 低置信度 + 学习的不确定性
+        uncertainty_weights = 0.4 * disagreement + 0.3 * confidence_uncertainty + 0.3 * learned_uncertainty
         
-        # 4. 计算补集并加权
-        complement = 1.0 - preds                # [bs, 1, h, w]
-        complement_weighted = complement * w    # [bs, 1, h, w]
-        # complement_weighted += preds          ## 此处改动记为add   效果很差 几乎为0
-        # complement_weighted += complement       ## 此处改动记为add1  指标提升，但w可视化几乎没有
-        return w, complement_weighted
+        # 6. 特征融合（可选）
+        fused_features = self.fusion_net(combined_input)  # [bs, 1, h, w]
+        
+        # 7. 应用非线性增强（使高不确定性区域更突出）
+        uncertainty_weights = torch.sigmoid((uncertainty_weights - 0.5) * 6.0)
+        
+        return uncertainty_weights, fused_features
 
 
 
@@ -389,7 +364,27 @@ class Multi_decoder_Net(nn.Module):
         self.end_conv2 = nn.Conv2d(128, 1, 1) 
         self.end_conv3 = nn.Conv2d(256, 1, 1)
 
-        self.fusion = EnhancedFusionWithSqueeze()
+        self.uncertainty_fusion = UncertaintyAwareFusion(input_channels=1)
+
+        # 最终细化网络
+        self.final_refiner = nn.Sequential(
+            nn.Conv2d(1, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(8, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
+
+        # 修正模块
+        self.correction_module = nn.Sequential(
+            nn.Conv2d(2, 32, kernel_size=3, padding=1),  # 输入：原始预测+不确定性权重
+            nn.ReLU(),
+            nn.Conv2d(32, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 1, kernel_size=1),  # 修正量
+            nn.Tanh()  # 输出[-1, 1]的修正值
+        )
 
     def _calculate_layer_norm(self, layer):
         """实时计算层的参数范数"""
@@ -424,25 +419,39 @@ class Multi_decoder_Net(nn.Module):
 
         ske_strong, ske_alter = self.decouple_layer(x5)                    ## [bs, 128, 16, 16]
         mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter)     ## [bs, 1, 256, 256]
-        w, complement_weighted = self.fusion(o_seg1, mask_strong, mask_alter)
+        # 1. 识别不确定区域
+        uncertainty_weights, _ = self.uncertainty_fusion(o_seg1, mask_strong, mask_alter)
+        # uncertainty_weights: [bs, 1, 256, 256]，值越大表示越不确定
+
+        # 2. 计算修正量
+        correction_input = torch.cat([o_seg1, uncertainty_weights], dim=1)  # [bs, 2, 256, 256]
+        correction = self.correction_module(correction_input)  # [bs, 1, 256, 256]，修正量
+        
+        # 3. 应用修正（不确定区域修正大，确定区域修正小）
+        # 修正系数：0.5控制修正幅度
+        corrected_preds = o_seg1 + uncertainty_weights * correction * 0.5
+        corrected_preds = torch.clamp(corrected_preds, 0, 1)  # 限制在[0,1]
+
+        # 4. 可选：最终细化
+        final_output = self.final_refiner(corrected_preds)
 
         x1 = self.end_conv1(x1)        ## [bs, 1, 256, 256]
         x2 = self.end_conv2(x2)        ## [bs, 1, 128, 128]
         x3 = self.end_conv3(x3)        ## [bs, 1, 64, 64]
 
         # 返回浅层特征用于尾部loss计算
-        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights, w, complement_weighted
+        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights, uncertainty_weights, final_output
 
 
 
 
 # unet = Multi_decoder_Net(3)
 # a = torch.rand(1, 3, 256, 256)
-# o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, w, complement= unet.forward(a)
+# o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, w, final_output= unet.forward(a)
 # print(o_seg1.size())        # torch.Size([1, 1, 256, 256])
 # print(f_fg.size())  
 # print(f_bg.size())  
 # print(x1.size())            # torch.Size([1, 1, 256, 256])
 # print(x2.size())            # torch.Size([1, 1, 128, 128])
 # print(x3.size())            # torch.Size([1, 1, 64, 64])
-# print(complement.size())    # torch.Size([1, 1, 256, 256])
+# print(final_output.size())    # torch.Size([1, 1, 256, 256])

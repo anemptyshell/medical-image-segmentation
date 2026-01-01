@@ -12,7 +12,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet1221.network import Multi_decoder_Net
+from Med_image_seg.unet0101.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 import numpy as np
@@ -31,7 +31,7 @@ def arguments():
     return args
 
 
-class unet1221(base_model):
+class unet0101(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -300,7 +300,7 @@ class unet1221(base_model):
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
             edge = edge.cuda(non_blocking=True).float()
-            preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
+            preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, uncertainty_weights, final_preds = self.network(images)
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_strong, ske_strong)
@@ -319,12 +319,21 @@ class unet1221(base_model):
             # 组合尾部损失
             edge_loss = norm_weights[0] * edge_loss1 + norm_weights[1] * edge_loss2 + norm_weights[2] * edge_loss3
 
-            loss_complement = self.BceDiceLoss(complement, 1-targets)
+            final_loss = self.BceDiceLoss(final_preds, targets)
 
-            # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement
-            loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement
+            # 4. 不确定性聚焦损失（创新点）
+            # 给不确定区域更高的权重，让模型更关注这些难例
+            uncertainty_weighted_loss = (uncertainty_weights * F.binary_cross_entropy(
+                final_preds, targets, reduction='none'
+            )).mean()
+
+            # 5. 不确定性正则化（防止过度修正）
+            # 鼓励不确定性权重不要太大
+            uncertainty_reg = torch.mean(uncertainty_weights**2) * 0.01
+
+            loss = 0.1*loss1 + 0.1*loss2 + 0.1*loss3 + 0.1*edge_loss + 0.5*final_loss + 0.05*uncertainty_weighted_loss + 0.05*uncertainty_reg
            
-            iou, dice = iou_score(1-complement, targets)
+            iou, dice = iou_score(final_preds, targets)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -381,11 +390,11 @@ class unet1221(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, uncertainty_weights, final_preds = self.network(images)
                 
-                loss = self.BceDiceLoss(1-complement, targets)
+                loss = self.BceDiceLoss(final_preds, targets)
                 # iou, dice = iou_score(preds, targets)
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(1-complement, targets, epoch)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(final_preds, targets, epoch)
 
                 avg_meters['loss'].update(loss.item(), images.size(0))
                 avg_meters['iou'].update(iou, images.size(0))
@@ -398,7 +407,7 @@ class unet1221(base_model):
                 avg_meters['sen'].update(sensitivity, images.size(0))
 
                 ########################                                          
-                output = F.sigmoid(1-complement)
+                output = F.sigmoid(final_preds)
                 output_ = torch.where(output>0.5,1,0)
                 gt_ = torch.where(targets>0.5,1,0)
                 pred_np = output_.squeeze().cpu().numpy()
@@ -453,9 +462,9 @@ class unet1221(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement = self.network(images)
+                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, uncertainty_weights, final_preds = self.network(images)
 
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(1-complement, targets)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(final_preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
                 dice_avg_meter.update(dice, images.size(0))
                 hd_avg_meter.update(hd, images.size(0))
@@ -466,7 +475,7 @@ class unet1221(base_model):
                 sensitivity_avg_meter.update(sensitivity, images.size(0))
 
                 ################################################ 
-                output = F.sigmoid(1-complement)
+                output = F.sigmoid(final_preds)
                 output_ = torch.where(output>0.5,1,0)
                 gt_ = torch.where(targets>0.5,1,0)
                 pred_np = output_.squeeze().cpu().numpy()
@@ -479,11 +488,11 @@ class unet1221(base_model):
 
                 size = self.args.img_size / 100
                 if iter % self.args.save_interval == 0:
-                    preds_com = torch.sigmoid(1-complement).cpu().numpy()
-                    preds_com[preds_com >= 0.5] = 1
-                    preds_com[preds_com < 0.5] = 0
-                    preds_com = np.squeeze(preds_com, axis=0)
-                    preds_com = np.squeeze(preds_com, axis=0)
+                    final_preds = torch.sigmoid(final_preds).cpu().numpy()
+                    final_preds[final_preds >= 0.5] = 1
+                    final_preds[final_preds < 0.5] = 0
+                    final_preds = np.squeeze(final_preds, axis=0)
+                    final_preds = np.squeeze(final_preds, axis=0)
 
 
                     w = torch.sigmoid(w).cpu().numpy()
@@ -499,7 +508,7 @@ class unet1221(base_model):
                     plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
                     plt.margins(0,0)
        
-                    plt.imshow(preds_com, cmap='gray')  
+                    plt.imshow(final_preds, cmap='gray')  
                     plt.axis('off')  # 关闭坐标轴
                     plt.savefig(self.args.res_dir +'/'+ str(iter) +'.png')
                     plt.close()
