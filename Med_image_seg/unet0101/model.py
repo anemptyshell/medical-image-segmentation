@@ -331,7 +331,8 @@ class unet0101(base_model):
             # 鼓励不确定性权重不要太大
             uncertainty_reg = torch.mean(uncertainty_weights**2) * 0.01
 
-            loss = 0.1*loss1 + 0.1*loss2 + 0.1*loss3 + 0.1*edge_loss + 0.5*final_loss + 0.05*uncertainty_weighted_loss + 0.05*uncertainty_reg
+            # loss = 0.1*loss1 + 0.1*loss2 + 0.1*loss3 + 0.1*edge_loss + 0.5*final_loss + 0.05*uncertainty_weighted_loss + 0.05*uncertainty_reg
+            loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + final_loss + 0.5*uncertainty_weighted_loss + 0.5*uncertainty_reg
            
             iou, dice = iou_score(final_preds, targets)
 
@@ -495,12 +496,12 @@ class unet0101(base_model):
                     final_preds = np.squeeze(final_preds, axis=0)
 
 
-                    w = torch.sigmoid(w).cpu().numpy()
+                    uncertainty_weights = torch.sigmoid(uncertainty_weights).cpu().numpy()
                     # w = w.cpu().numpy()
                     # w[w >= 0.5] = 1
                     # w[w < 0.5] = 0
-                    w = np.squeeze(w, axis=0)
-                    w = np.squeeze(w, axis=0)
+                    uncertainty_weights = np.squeeze(uncertainty_weights, axis=0)
+                    uncertainty_weights = np.squeeze(uncertainty_weights, axis=0)
 
                     plt.figure(figsize=(size,size),dpi=100)
                     plt.gca().xaxis.set_major_locator(plt.NullLocator())
@@ -519,7 +520,7 @@ class unet0101(base_model):
                     plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
                     plt.margins(0,0)
 
-                    plt.imshow(w)  
+                    plt.imshow(uncertainty_weights)  
                     plt.axis('off')  # 关闭坐标轴
                     plt.savefig(self.args.res_dir +'/'+ str(iter) +'w.png')
                     plt.close()

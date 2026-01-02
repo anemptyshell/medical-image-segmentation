@@ -321,8 +321,8 @@ class unet1221(base_model):
 
             loss_complement = self.BceDiceLoss(complement, 1-targets)
 
-            # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement
             loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement
+            # loss = 0.2 * loss1 + 0.1 * loss2 + 0.1 * loss3 + 0.1 * edge_loss + 0.5*loss_complement
            
             iou, dice = iou_score(1-complement, targets)
 
