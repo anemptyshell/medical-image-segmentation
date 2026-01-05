@@ -152,17 +152,11 @@ class DecoupleLayer(nn.Module):
             CBR(512, out_c, kernel_size=3, padding=1),
             CBR(out_c, out_c, kernel_size=1, padding=0)
         )
-        # self.cbr_uc = nn.Sequential(
-        #     CBR(in_c, 512, kernel_size=3, padding=1),
-        #     CBR(512, out_c, kernel_size=3, padding=1),
-        #     CBR(out_c, out_c, kernel_size=1, padding=0)
-        # )
 
     def forward(self, x):
         f_fg = self.cbr_fg(x)
         f_bg = self.cbr_bg(x)
-        # f_uc = self.cbr_uc(x)
-        return f_fg, f_bg #, f_uc
+        return f_fg, f_bg 
 
 
 """Auxiliary Head"""
@@ -196,25 +190,11 @@ class AuxiliaryHead(nn.Module):
             nn.Conv2d(64, 1, kernel_size=1, padding=0),
             nn.Sigmoid()
         )
-        # self.branch_uc = nn.Sequential(
-        #     CBR(in_c, 256, kernel_size=3, padding=1),
-        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/8
-        #     CBR(256, 256, kernel_size=3, padding=1),
-        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/4
-        #     CBR(256, 128, kernel_size=3, padding=1),
-        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/2
-        #     CBR(128, 64, kernel_size=3, padding=1),
-        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1
-        #     CBR(64, 64, kernel_size=3, padding=1),
-        #     nn.Conv2d(64, 1, kernel_size=1, padding=0),
-        #     nn.Sigmoid()
-        # )
 
     def forward(self, f_fg, f_bg):
         mask_fg = self.branch_fg(f_fg)
         mask_bg = self.branch_bg(f_bg)
-        # mask_uc = self.branch_uc(f_uc)
-        return mask_fg, mask_bg #, mask_uc
+        return mask_fg, mask_bg 
 
 
 
