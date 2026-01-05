@@ -426,13 +426,13 @@ class Multi_decoder_Net(nn.Module):
 
 
 
-unet = Multi_decoder_Net(3)
-a = torch.rand(1, 3, 256, 256)
-o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, w, complement= unet.forward(a)
-print(o_seg1.size())        # torch.Size([1, 1, 256, 256])
-print(f_fg.size())  
-print(f_bg.size())  
-print(x1.size())            # torch.Size([1, 1, 256, 256])
-print(x2.size())            # torch.Size([1, 1, 128, 128])
-print(x3.size())            # torch.Size([1, 1, 64, 64])
-print(complement.size())    # torch.Size([1, 1, 256, 256])
+# unet = Multi_decoder_Net(3)
+# a = torch.rand(1, 3, 256, 256)
+# o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, w, complement= unet.forward(a)
+# print(o_seg1.size())        # torch.Size([1, 1, 256, 256])
+# print(f_fg.size())  
+# print(f_bg.size())  
+# print(x1.size())            # torch.Size([1, 1, 256, 256])
+# print(x2.size())            # torch.Size([1, 1, 128, 128])
+# print(x3.size())            # torch.Size([1, 1, 64, 64])
+# print(complement.size())    # torch.Size([1, 1, 256, 256])

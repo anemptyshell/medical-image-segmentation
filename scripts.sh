@@ -153,9 +153,9 @@ cd ~/mis-ft/medical-image-segmentation
 # python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet1231 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1  --output_end lossmi
 
 
-python main.py --dataset CHASE_DB1 --epochs 200 --phase train --img_size 256 --model_name unet1221 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1 --output_end add1
-python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet1221 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1 --output_end add1
-
+python main.py --dataset CHASE_DB1 --epochs 200 --phase train --img_size 256 --model_name unet1221 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1 --output_end local_correlation
+python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet1221 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1 --output_end local_correlation
+## 没有add
 
 # python main.py --dataset CHASE_DB1 --epochs 50 --phase train --img_size 256 --model_name unet0101 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1 --output_end loss
 # python main.py --dataset CHASE_DB1 --epochs 50 --phase test --img_size 256 --model_name unet0101 --batch_size 2 --lr 0.0085 --print_interval 1 --save_interval 1 --output_end loss
