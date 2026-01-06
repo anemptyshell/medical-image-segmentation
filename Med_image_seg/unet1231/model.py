@@ -479,11 +479,11 @@ class unet1231(base_model):
 
                 size = self.args.img_size / 100
                 if iter % self.args.save_interval == 0:
-                    preds = torch.sigmoid(1-complement_out).cpu().numpy()
-                    preds[preds >= 0.5] = 1
-                    preds[preds < 0.5] = 0
-                    preds = np.squeeze(preds, axis=0)
-                    preds = np.squeeze(preds, axis=0)
+                    preds_com = torch.sigmoid(1-complement_out).cpu().numpy()
+                    preds_com[preds_com >= 0.5] = 1
+                    preds_com[preds_com < 0.5] = 0
+                    preds_com = np.squeeze(preds_com, axis=0)
+                    preds_com = np.squeeze(preds_com, axis=0)
 
 
                     w = torch.sigmoid(w).cpu().numpy()
@@ -499,7 +499,7 @@ class unet1231(base_model):
                     plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
                     plt.margins(0,0)
        
-                    plt.imshow(preds, cmap='gray')  
+                    plt.imshow(preds_com, cmap='gray')  
                     plt.axis('off')  # 关闭坐标轴
                     plt.savefig(self.args.res_dir +'/'+ str(iter) +'.png')
                     plt.close()
