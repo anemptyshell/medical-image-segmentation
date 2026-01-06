@@ -329,7 +329,7 @@ class EnhancedFusion(nn.Module):
         complement = 1.0 - preds                # [bs, 1, h, w]
         complement_weighted = complement * w    # [bs, 1, h, w]
         # complement_weighted += preds          ## 此处改动记为add   效果很差 几乎为0
-        # complement_weighted += complement       ## 此处改动记为add1  指标提升，但w可视化几乎没有
+        complement_weighted += complement       ## 此处改动记为add1  指标提升，但w可视化几乎没有
         return w, complement_weighted
 
 

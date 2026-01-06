@@ -321,8 +321,8 @@ class unet1231(base_model):
 
             loss_complement = self.BceDiceLoss(complement_out, 1-targets)
 
-            # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement + 0.5 * loss_mi
-            loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement + loss_mi ## lossmi
+            loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement + 0.5 * loss_mi
+            # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement + loss_mi ## 记为lossmi
            
             iou, dice = iou_score(1 - complement_out, targets)
 
@@ -398,7 +398,7 @@ class unet1231(base_model):
                 avg_meters['sen'].update(sensitivity, images.size(0))
 
                 ########################                                          
-                output = F.sigmoid(preds)
+                output = F.sigmoid(1-complement_out)
                 output_ = torch.where(output>0.5,1,0)
                 gt_ = torch.where(targets>0.5,1,0)
                 pred_np = output_.squeeze().cpu().numpy()
@@ -479,7 +479,7 @@ class unet1231(base_model):
 
                 size = self.args.img_size / 100
                 if iter % self.args.save_interval == 0:
-                    preds = torch.sigmoid(preds).cpu().numpy()
+                    preds = torch.sigmoid(1-complement_out).cpu().numpy()
                     preds[preds >= 0.5] = 1
                     preds[preds < 0.5] = 0
                     preds = np.squeeze(preds, axis=0)

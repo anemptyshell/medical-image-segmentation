@@ -196,25 +196,11 @@ class AuxiliaryHead(nn.Module):
             nn.Conv2d(64, 1, kernel_size=1, padding=0),
             nn.Sigmoid()
         )
-        # self.branch_uc = nn.Sequential(
-        #     CBR(in_c, 256, kernel_size=3, padding=1),
-        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/8
-        #     CBR(256, 256, kernel_size=3, padding=1),
-        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/4
-        #     CBR(256, 128, kernel_size=3, padding=1),
-        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1/2
-        #     CBR(128, 64, kernel_size=3, padding=1),
-        #     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),  # 1
-        #     CBR(64, 64, kernel_size=3, padding=1),
-        #     nn.Conv2d(64, 1, kernel_size=1, padding=0),
-        #     nn.Sigmoid()
-        # )
 
     def forward(self, f_fg, f_bg):
         mask_fg = self.branch_fg(f_fg)
         mask_bg = self.branch_bg(f_bg)
-        # mask_uc = self.branch_uc(f_uc)
-        return mask_fg, mask_bg #, mask_uc
+        return mask_fg, mask_bg 
 
 
 class EnhancedFusionWithSqueeze(nn.Module):
@@ -269,31 +255,42 @@ class EnhancedFusionWithSqueeze(nn.Module):
             sim_map = self.similarity_net(combined)  # [bs, 1, h, w]
             
         elif method == 'local_correlation':
-            # 计算局部相关性
-            # 标准化
-            feat1_norm = (feat1 - feat1.mean(dim=(1,2), keepdim=True)) / (feat1.std(dim=(1,2), keepdim=True) + 1e-8)
-            feat2_norm = (feat2 - feat2.mean(dim=(1,2), keepdim=True)) / (feat2.std(dim=(1,2), keepdim=True) + 1e-8)
-            
-            # 使用3x3卷积计算局部均值
+            """
+                计算两个特征图的局部相关性（皮尔逊相关系数）
+
+                正确的局部相关计算步骤：
+                1. 对每个位置，考虑其邻域窗口
+                2. 计算窗口内的均值、标准差、协方差
+                3. 计算相关系数：cov(X,Y) / (std(X) * std(Y))
+            """
+            bs, h, w = feat1.shape
+    
+            # 首先，需要将2D特征图添加通道维度
+            feat1_unsq = feat1.unsqueeze(1)  # [bs, 1, h, w]
+            feat2_unsq = feat2.unsqueeze(1)  # [bs, 1, h, w]
+
+            # 用这个核做卷积 = 计算3×3窗口内的平均值
             kernel = torch.ones(1, 1, 3, 3, device=feat1.device) / 9.0
-            
-            # 需要先添加通道维度
-            feat1_norm_unsq = feat1_norm.unsqueeze(1)  # [bs, 1, h, w]
-            feat2_norm_unsq = feat2_norm.unsqueeze(1)  # [bs, 1, h, w]
-            
-            local_mean1 = F.conv2d(feat1_norm_unsq, kernel, padding=1)
-            local_mean2 = F.conv2d(feat2_norm_unsq, kernel, padding=1)
-            
-            # 局部协方差
-            local_cov = F.conv2d(feat1_norm_unsq * feat2_norm_unsq, kernel, padding=1) - local_mean1 * local_mean2
-            
-            # 局部标准差
-            local_std1 = torch.sqrt(F.conv2d(feat1_norm_unsq**2, kernel, padding=1) - local_mean1**2 + 1e-8)
-            local_std2 = torch.sqrt(F.conv2d(feat2_norm_unsq**2, kernel, padding=1) - local_mean2**2 + 1e-8)
-            
-            # 局部相关系数
-            sim_map = local_cov / (local_std1 * local_std2 + 1e-8)
-            sim_map = (sim_map + 1.0) / 2.0  # 映射到[0, 1]
+
+            # 计算局部均值
+            local_mean1 = F.conv2d(feat1_unsq, kernel, padding=1, groups=1)
+            local_mean2 = F.conv2d(feat2_unsq, kernel, padding=1, groups=1)
+
+            # 计算局部二阶矩
+            local_mean1_sq = F.conv2d(feat1_unsq**2, kernel, padding=1, groups=1)
+            local_mean2_sq = F.conv2d(feat2_unsq**2, kernel, padding=1, groups=1)
+            local_mean12 = F.conv2d(feat1_unsq * feat2_unsq, kernel, padding=1, groups=1)
+
+            # 计算局部方差和协方差
+            local_var1 = local_mean1_sq - local_mean1**2
+            local_var2 = local_mean2_sq - local_mean2**2
+            local_cov = local_mean12 - local_mean1 * local_mean2
+
+            eps = 1e-8
+            # 计算局部相关系数
+            local_corr = local_cov / (torch.sqrt(local_var1 + eps) * torch.sqrt(local_var2 + eps))
+            # 相关系数范围是[-1, 1]，映射到[0, 1]表示相似度
+            sim_map = (local_corr + 1.0) / 2.0  # [bs, 1, h, w]
             
         elif method == 'inverse_diff':
             # 基于差异的相似度
@@ -322,11 +319,11 @@ class EnhancedFusionWithSqueeze(nn.Module):
         
         # 计算相似度图
         sim_map1 = self._compute_spatial_similarity(
-            fused_strong_squeezed, preds_squeezed, method='conv'
+            fused_strong_squeezed, preds_squeezed, method='local_correlation'
         )  # [bs, 1, h, w]
         
         sim_map2 = self._compute_spatial_similarity(
-            fused_alter_squeezed, preds_squeezed, method='conv'
+            fused_alter_squeezed, preds_squeezed, method='local_correlation'
         )  # [bs, 1, h, w]
         
         # 3. 选择策略得到权重
