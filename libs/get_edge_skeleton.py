@@ -172,7 +172,7 @@ def generate_custom_skeleton_alternative(binary_image, a=1):
     # 合并结果：半径<=a的区域 + 半径>a的削减区域
     custom_skeleton = np.logical_or(custom_skeleton, mask_radius_leq_a) 
     # 确保不超过原始血管边界
-    # custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
+    custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
     
     return custom_skeleton
 
@@ -181,7 +181,7 @@ def generate_custom_skeleton_alternative(binary_image, a=1):
 
 def skeleton_extract(root, a):
     img_root = os.path.join(root, 'masks')
-    skeleton_root = os.path.join(root, f'strong_{a}')
+    skeleton_root = os.path.join(root, f'skeleton_{a}')
     
     if not os.path.exists(skeleton_root):
         os.makedirs(skeleton_root)  
@@ -224,18 +224,18 @@ def skeleton_extract(root, a):
 
 
 if __name__ == '__main__':
-    # train_er = "/home/my/data/CHASE_DB1/train/"
-    # # edge_extract(train_er)
-    # for a in [0.5, 1, 1.5]:
-    #     skeleton_extract(train_er, a)
+    train_er = "/home/my/data/CHASE_DB1/val/"
+    # edge_extract(train_er)
+    for a in [2]:
+        skeleton_extract(train_er, a)
 
     # train_er1 = "/home/my/data/DRIVE/train/"
     # for a in [0.5, 1, 1.5]:
     #     skeleton_extract(train_er1, a)
     
-    train_er2 = "/home/my/data/STARE/train/"
-    for a in [1, 1.5]:
-        skeleton_extract(train_er2, a)
+    # train_er2 = "/home/my/data/STARE/train/"
+    # for a in [1, 1.5]:
+    #     skeleton_extract(train_er2, a)
 
 
     

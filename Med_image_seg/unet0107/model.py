@@ -12,7 +12,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet1231.network import Multi_decoder_Net
+from Med_image_seg.unet0107.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 import numpy as np
@@ -31,7 +31,7 @@ def arguments():
     return args
 
 
-class unet1231(base_model):
+class unet0107(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -300,29 +300,28 @@ class unet1231(base_model):
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
             edge = edge.cuda(non_blocking=True).float()
-            preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement_out, loss_mi = self.network(images)
+            preds, pred_strong, pred_alter, w, complement_out, loss_mi = self.network(images)
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_strong, ske_strong)
             loss3 = self.BceDiceLoss(pred_alter, ske_alter)
 
             # 对尾部label进行下采样以匹配不同尺度的特征图
-            edge_256x256 = edge                                                                        # [2, 1, 256, 256] - 原始尺寸
-            edge_128x128 = F.interpolate(edge, size=(128, 128), mode='bilinear', align_corners=False)  # [2, 1, 128, 128]
-            edge_64x64 = F.interpolate(edge, size=(64, 64), mode='bilinear', align_corners=False)      # [2, 1, 64, 64]
+            # edge_256x256 = edge                                                                        # [2, 1, 256, 256] - 原始尺寸
+            # edge_128x128 = F.interpolate(edge, size=(128, 128), mode='bilinear', align_corners=False)  # [2, 1, 128, 128]
+            # edge_64x64 = F.interpolate(edge, size=(64, 64), mode='bilinear', align_corners=False)      # [2, 1, 64, 64]
 
             # 计算多尺度尾部损失
-            edge_loss1 = self.BceDiceLoss(x1, edge_256x256)
-            edge_loss2 = self.BceDiceLoss(x2, edge_128x128) 
-            edge_loss3 = self.BceDiceLoss(x3, edge_64x64)
+            # edge_loss1 = self.BceDiceLoss(x1, edge_256x256)
+            # edge_loss2 = self.BceDiceLoss(x2, edge_128x128) 
+            # edge_loss3 = self.BceDiceLoss(x3, edge_64x64)
 
             # 组合尾部损失
-            edge_loss = norm_weights[0] * edge_loss1 + norm_weights[1] * edge_loss2 + norm_weights[2] * edge_loss3
+            # edge_loss = norm_weights[0] * edge_loss1 + norm_weights[1] * edge_loss2 + norm_weights[2] * edge_loss3
 
             loss_complement = self.BceDiceLoss(complement_out, 1-targets)
 
-            # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + loss_complement + 0.5 * loss_mi
-            loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement + 0.3 * loss_mi
+            loss = loss1 + 0.5 * loss2 + 0.5 * loss3 + loss_complement + 0.5 * loss_mi
             # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement + loss_mi ## 记为lossmi
            
             iou, dice = iou_score(1 - complement_out, targets)
@@ -382,7 +381,7 @@ class unet1231(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement_out, loss_mi = self.network(images)
+                preds, pred_strong, pred_alter, w, complement_out, loss_mi = self.network(images)
                 
                 loss = self.BceDiceLoss(1-complement_out, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -454,7 +453,7 @@ class unet1231(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, x1, x2, x3, norm_weights, w, complement_out, loss_mi = self.network(images)
+                preds, pred_strong, pred_alter, w, complement_out, loss_mi = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(1-complement_out, targets)
                 iou_avg_meter.update(iou, images.size(0))

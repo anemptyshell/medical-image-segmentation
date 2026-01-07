@@ -152,17 +152,11 @@ class DecoupleLayer(nn.Module):
             CBR(512, out_c, kernel_size=3, padding=1),
             CBR(out_c, out_c, kernel_size=1, padding=0)
         )
-        # self.cbr_uc = nn.Sequential(
-        #     CBR(in_c, 512, kernel_size=3, padding=1),
-        #     CBR(512, out_c, kernel_size=3, padding=1),
-        #     CBR(out_c, out_c, kernel_size=1, padding=0)
-        # )
 
     def forward(self, x):
         f_fg = self.cbr_fg(x)
         f_bg = self.cbr_bg(x)
-        # f_uc = self.cbr_uc(x)
-        return f_fg, f_bg #, f_uc
+        return f_fg, f_bg 
 
 
 """Auxiliary Head"""
@@ -281,8 +275,7 @@ class EnhancedFusionWithSqueeze(nn.Module):
             local_mean2_sq = F.conv2d(feat2_unsq**2, kernel, padding=1, groups=1)
             local_mean12 = F.conv2d(feat1_unsq * feat2_unsq, kernel, padding=1, groups=1)
 
-            # 方差公式：var(X) = E[X²] - E[X]²
-            # 协方差公式：cov(X,Y) = E[XY] - E[X]E[Y]
+            # 计算局部方差和协方差
             local_var1 = local_mean1_sq - local_mean1**2
             local_var2 = local_mean2_sq - local_mean2**2
             local_cov = local_mean12 - local_mean1 * local_mean2
@@ -290,7 +283,7 @@ class EnhancedFusionWithSqueeze(nn.Module):
             eps = 1e-8
             # 计算局部相关系数
             local_corr = local_cov / (torch.sqrt(local_var1 + eps) * torch.sqrt(local_var2 + eps))
-            # 相关系数范围是[-1, 1]，映射到[0, 1]表示相似度，[-1, 1] → [0, 1]
+            # 相关系数范围是[-1, 1]，映射到[0, 1]表示相似度
             sim_map = (local_corr + 1.0) / 2.0  # [bs, 1, h, w]
             
         elif method == 'inverse_diff':
@@ -493,14 +486,14 @@ class Multi_decoder_Net(nn.Module):
         self.fusion = EnhancedFusionWithSqueeze()
         self.sfd = selective_feature_decoupler(1, 1, 256, 256)
 
-    def _calculate_layer_norm(self, layer):
-        """实时计算层的参数范数"""
-        total_norm = 0.0
-        for param in layer.parameters():
-            if param.requires_grad:
-                # total_norm += torch.norm(param).item()
-                total_norm = total_norm + torch.norm(param)
-        return total_norm
+    # def _calculate_layer_norm(self, layer):
+    #     """实时计算层的参数范数"""
+    #     total_norm = 0.0
+    #     for param in layer.parameters():
+    #         if param.requires_grad:
+    #             # total_norm += torch.norm(param).item()
+    #             total_norm = total_norm + torch.norm(param)
+    #     return total_norm
 
     def forward(self, x):
         ## x: [bs, 3, 256, 256]
@@ -510,12 +503,12 @@ class Multi_decoder_Net(nn.Module):
         x3 = self.down2(x2)                               ## [bs, 256, 64, 64]
         x4 = self.down3(x3)                               ## [bs, 512, 32, 32]
         x5 = self.down4(x4)                               ## [bs, 1024, 16, 16]
-        norm1 = self._calculate_layer_norm(self.inc)      # x1对应的层
-        norm2 = self._calculate_layer_norm(self.down1)    # x2对应的层  
-        norm3 = self._calculate_layer_norm(self.down2)    # x3对应的层
+        # norm1 = self._calculate_layer_norm(self.inc)      # x1对应的层
+        # norm2 = self._calculate_layer_norm(self.down1)    # x2对应的层  
+        # norm3 = self._calculate_layer_norm(self.down2)    # x3对应的层
 
-        norms_tensor = torch.tensor([norm1, norm2, norm3], device=x.device, dtype=x.dtype)
-        norm_weights = norms_tensor / norms_tensor.sum()  
+        # norms_tensor = torch.tensor([norm1, norm2, norm3], device=x.device, dtype=x.dtype)
+        # norm_weights = norms_tensor / norms_tensor.sum()  
     
         # decoder
         o_4_1 = self.up1_1(x5, x4)                        ## [bs, 512, 32, 32]   
@@ -530,12 +523,12 @@ class Multi_decoder_Net(nn.Module):
 
         complement_out, loss_mi, unimportant = self.sfd(complement_weighted)
 
-        x1 = self.end_conv1(x1)        ## [bs, 1, 256, 256]
-        x2 = self.end_conv2(x2)        ## [bs, 1, 128, 128]
-        x3 = self.end_conv3(x3)        ## [bs, 1, 64, 64]
+        # x1 = self.end_conv1(x1)        ## [bs, 1, 256, 256]
+        # x2 = self.end_conv2(x2)        ## [bs, 1, 128, 128]
+        # x3 = self.end_conv3(x3)        ## [bs, 1, 64, 64]
 
         # 返回浅层特征用于尾部loss计算
-        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights, w, complement_out, loss_mi
+        return o_seg1, mask_strong, mask_alter, w, complement_out, loss_mi
 
 
 
