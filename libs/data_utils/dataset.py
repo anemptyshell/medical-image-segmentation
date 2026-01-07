@@ -51,9 +51,9 @@ class ISIC_datasets(Dataset):
             mask_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "train/masks/"))
             # thin_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "thin/"))
             # thick_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "thick/"))
-            edge_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "skeleton_2/"))
-            strong_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "strong_2/"))
-            skeleton_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "skeleton_2/"))
+            edge_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "skeleton_2/"))  # skeleton2
+            strong_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "strong_2/"))  # srong2
+            skeleton_train_list = os.listdir(os.path.join(args.data_path, args.dataset, "skeleton_2/"))  # skeleton2
 
             img_train_list = sorted(img_train_list)
             mask_train_list = sorted(mask_train_list)

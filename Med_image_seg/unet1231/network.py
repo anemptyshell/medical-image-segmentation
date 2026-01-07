@@ -319,11 +319,11 @@ class EnhancedFusionWithSqueeze(nn.Module):
         
         # 计算相似度图
         sim_map1 = self._compute_spatial_similarity(
-            fused_strong_squeezed, preds_squeezed, method='local_correlation'
+            fused_strong_squeezed, preds_squeezed, method='conv'
         )  # [bs, 1, h, w]
         
         sim_map2 = self._compute_spatial_similarity(
-            fused_alter_squeezed, preds_squeezed, method='local_correlation'
+            fused_alter_squeezed, preds_squeezed, method='conv'
         )  # [bs, 1, h, w]
         
         # 3. 选择策略得到权重
