@@ -452,37 +452,37 @@ class Multi_decoder_Net(nn.Module):
 
         # decoder
         self.up1_1 = Up(1024, 512, bilinear)
-        self.up1_2 = Up(1024, 512, bilinear)
-        self.up1_3 = Up(1024, 512, bilinear)
+        # self.up1_2 = Up(1024, 512, bilinear)
+        # self.up1_3 = Up(1024, 512, bilinear)
 
         self.up2_1 = Up(512, 256, bilinear)
-        self.up2_2 = Up(512, 256, bilinear)
-        self.up2_3 = Up(512, 256, bilinear)
+        # self.up2_2 = Up(512, 256, bilinear)
+        # self.up2_3 = Up(512, 256, bilinear)
 
         self.up3_1 = Up(256, 128, bilinear)
-        self.up3_2 = Up(256, 128, bilinear)
-        self.up3_3 = Up(256, 128, bilinear)
+        # self.up3_2 = Up(256, 128, bilinear)
+        # self.up3_3 = Up(256, 128, bilinear)
 
         self.up4_1 = Up(128, 64, bilinear)
-        self.up4_2 = Up(128, 64, bilinear)
-        self.up4_3 = Up(128, 64, bilinear)
+        # self.up4_2 = Up(128, 64, bilinear)
+        # self.up4_3 = Up(128, 64, bilinear)
 
         self.out_1 = OutConv(64, n_classes)
-        self.out_2 = OutConv(64, n_classes)
-        self.out_3 = OutConv(64, n_classes)
+        # self.out_2 = OutConv(64, n_classes)
+        # self.out_3 = OutConv(64, n_classes)
 
-        self.decouple_layer = DecoupleLayer(1024, 128)
-        self.aux_head = AuxiliaryHead(128)
+        # self.decouple_layer = DecoupleLayer(1024, 128)
+        # self.aux_head = AuxiliaryHead(128)
 
         # self.end_conv1 = nn.Conv2d(64, 1, 1).cuda()
         # self.end_conv2 = nn.Conv2d(128, 1, 1).cuda() 
         # self.end_conv3 = nn.Conv2d(256, 1, 1).cuda()
-        self.end_conv1 = nn.Conv2d(64, 1, 1)
-        self.end_conv2 = nn.Conv2d(128, 1, 1) 
-        self.end_conv3 = nn.Conv2d(256, 1, 1)
+        # self.end_conv1 = nn.Conv2d(64, 1, 1)
+        # self.end_conv2 = nn.Conv2d(128, 1, 1) 
+        # self.end_conv3 = nn.Conv2d(256, 1, 1)
 
-        self.fusion = EnhancedFusionWithSqueeze()
-        self.sfd = selective_feature_decoupler(1, 1, 256, 256)
+        # self.fusion = EnhancedFusionWithSqueeze()
+        # self.sfd = selective_feature_decoupler(1, 1, 256, 256)
 
 
     def forward(self, x):
@@ -505,11 +505,11 @@ class Multi_decoder_Net(nn.Module):
         # mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter)     ## [bs, 1, 256, 256]
         # w, complement_weighted = self.fusion(o_seg1, mask_strong, mask_alter)
 
-        output, loss_mi, unimportant = self.sfd(o_seg1)
+        # output, loss_mi, unimportant = self.sfd(o_seg1)
 
 
         # 返回浅层特征用于尾部loss计算
-        return output, o_seg1, loss_mi
+        return o_seg1#, o_seg1, loss_mi
 
 
 

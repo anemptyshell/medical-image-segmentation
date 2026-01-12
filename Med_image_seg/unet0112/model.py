@@ -300,12 +300,14 @@ class unet0112(base_model):
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
             edge = edge.cuda(non_blocking=True).float()
-            preds, preds_raw, loss_mi = self.network(images)
+            # preds, preds_raw, loss_mi = self.network(images)
+            preds = self.network(images)
 
-            loss1 = self.BceDiceLoss(preds, targets)
-            loss2 = self.BceDiceLoss(preds_raw, targets)
+            loss = self.BceDiceLoss(preds, targets)
+            # loss2 = self.BceDiceLoss(preds_raw, targets)
 
-            loss = loss1 + 0.5*loss_mi + 0.5*loss2
+            # loss = loss1 + 0.5*loss_mi + 0.5*loss2
+            # loss = loss1 + 0.1*loss_mi + loss2
            
             iou, dice = iou_score(preds, targets)
 
@@ -364,7 +366,8 @@ class unet0112(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, preds_raw, loss_mi = self.network(images)
+                # preds, preds_raw, loss_mi = self.network(images)
+                preds = self.network(images)
                 
                 loss = self.BceDiceLoss(preds, targets)
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(preds, targets, epoch)
@@ -435,7 +438,8 @@ class unet0112(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, preds_raw, loss_mi = self.network(images)
+                # preds, preds_raw, loss_mi = self.network(images)
+                preds = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
