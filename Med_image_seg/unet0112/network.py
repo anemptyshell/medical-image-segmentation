@@ -430,6 +430,7 @@ class selective_feature_decoupler(nn.Module):
 
         # sigmoid
         loss_mi = torch.sigmoid(loss_mi)
+        # mi_loss = -loss_mi if loss_mi > 0 else loss_mi
 
         return s, loss_mi, u
 
