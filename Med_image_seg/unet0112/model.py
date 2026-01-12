@@ -12,6 +12,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
+from Med_image_seg.unet0112.loss import AdaptiveBceDiceLoss
 from Med_image_seg.unet0112.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
@@ -63,6 +64,7 @@ class unet0112(base_model):
 
         """define loss"""
         self.BceDiceLoss = BceDiceLoss().cuda()
+        self.loss_fn = AdaptiveBceDiceLoss(ssim_threshold=0.8, bce_weight=0.5, dice_weight=1.0).cuda()
         """define optimizer"""
         self.optimizer = self.set_optimizer()
         """define lr_scheduler"""
@@ -303,7 +305,8 @@ class unet0112(base_model):
             # preds, preds_raw, loss_mi = self.network(images)
             preds = self.network(images)
 
-            loss = self.BceDiceLoss(preds, targets)
+            # loss = self.BceDiceLoss(preds, targets)
+            loss = self.loss_fn(preds, targets)
             # loss2 = self.BceDiceLoss(preds_raw, targets)
 
             # loss = loss1 + 0.5*loss_mi + 0.5*loss2
@@ -315,6 +318,13 @@ class unet0112(base_model):
             loss.backward()
             self.optimizer.step()
             torch.cuda.empty_cache()
+
+            if step % 10 == 0:
+                stats = self.loss_fn.stats
+                avg_ssim = np.mean(stats['ssim_mean'][-10:]) if len(stats['ssim_mean']) >= 10 else 0
+                avg_ratio = np.mean(stats['selected_ratio'][-10:]) if len(stats['selected_ratio']) >= 10 else 0
+                print(f"Iter {step}: Loss={loss.item():.4f}, "
+                      f"Avg SSIM={avg_ssim:.3f}, Hard ratio={avg_ratio:.2%}")
 
             # loss_list.append(loss.item()
             avg_meters['loss'].update(loss.item(), images.size(0))
