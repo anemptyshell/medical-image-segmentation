@@ -281,7 +281,8 @@ class EnhancedFusionWithSqueeze(nn.Module):
             local_mean2_sq = F.conv2d(feat2_unsq**2, kernel, padding=1, groups=1)
             local_mean12 = F.conv2d(feat1_unsq * feat2_unsq, kernel, padding=1, groups=1)
 
-            # 计算局部方差和协方差
+            # 方差公式：var(X) = E[X²] - E[X]²
+            # 协方差公式：cov(X,Y) = E[XY] - E[X]E[Y]
             local_var1 = local_mean1_sq - local_mean1**2
             local_var2 = local_mean2_sq - local_mean2**2
             local_cov = local_mean12 - local_mean1 * local_mean2
@@ -289,7 +290,7 @@ class EnhancedFusionWithSqueeze(nn.Module):
             eps = 1e-8
             # 计算局部相关系数
             local_corr = local_cov / (torch.sqrt(local_var1 + eps) * torch.sqrt(local_var2 + eps))
-            # 相关系数范围是[-1, 1]，映射到[0, 1]表示相似度
+            # 相关系数范围是[-1, 1]，映射到[0, 1]表示相似度，[-1, 1] → [0, 1]
             sim_map = (local_corr + 1.0) / 2.0  # [bs, 1, h, w]
             
         elif method == 'inverse_diff':
