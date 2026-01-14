@@ -64,7 +64,7 @@ class unet0112(base_model):
 
         """define loss"""
         self.BceDiceLoss = BceDiceLoss().cuda()
-        self.loss_fn = AdaptiveBceDiceLoss(ssim_threshold=0.8, bce_weight=0.5, dice_weight=1.0).cuda()
+        self.loss_fn = AdaptiveBceDiceLoss(ssim_threshold=0.84, bce_weight=0.5, dice_weight=1.0).cuda()
         """define optimizer"""
         self.optimizer = self.set_optimizer()
         """define lr_scheduler"""

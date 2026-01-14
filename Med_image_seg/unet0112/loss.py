@@ -23,7 +23,7 @@ class BceDiceLoss(nn.Module):
 
 
 class AdaptiveBceDiceLoss(nn.Module):
-    def __init__(self, ssim_threshold=0.8, bce_weight=0.5, dice_weight=1.0):
+    def __init__(self, ssim_threshold=0.9, bce_weight=0.5, dice_weight=1.0):
         """
         ssim_threshold: SSIM阈值，低于此值的样本被认为是困难样本
         bce_weight: BCE损失权重
