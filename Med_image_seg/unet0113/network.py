@@ -334,6 +334,230 @@ class EnhancedFusionWithSqueeze(nn.Module):
         return w, complement_weighted
 
 
+class EnhancedFusionWithEntropyWeighting(nn.Module):
+    """使用信息熵评估置信度并分配权重的融合模块"""
+    def __init__(self, input_channels=1, hidden_channels=32):
+        super().__init__()
+        
+        # 交叉注意力模块（保持原有结构）
+        # self.cross_attn1 = CrossAttentionModule(
+        #     in_channels=input_channels,
+        #     hidden_channels=hidden_channels,
+        #     num_heads=4
+        # )
+        # self.cross_attn2 = CrossAttentionModule(
+        #     in_channels=input_channels,
+        #     hidden_channels=hidden_channels,
+        #     num_heads=4
+        # )
+        self.fuse_conv1 = nn.Sequential(
+            nn.Conv2d(input_channels * 2, hidden_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(hidden_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden_channels, input_channels, kernel_size=3, padding=1)
+        )
+        self.fuse_conv2 = nn.Sequential(
+            nn.Conv2d(input_channels * 2, hidden_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(hidden_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden_channels, input_channels, kernel_size=3, padding=1))
+        
+        self.out_proj1 = nn.Conv2d(hidden_channels, input_channels, kernel_size=1)
+        self.out_proj2 = nn.Conv2d(hidden_channels, input_channels, kernel_size=1)
+        
+        # 相似度计算网络（可选，可以保留或移除）
+        self.similarity_net = nn.Sequential(
+            nn.Conv2d(2, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(8, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
+        
+        # 熵权重调整网络（可选）
+        self.entropy_refine = nn.Sequential(
+            nn.Conv2d(1, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 1, kernel_size=3, padding=1),
+            nn.Sigmoid()
+        )
+    
+    def _compute_entropy(self, prob1, prob2):
+        #  """
+        # 计算两个预测之间的分歧熵
+        
+        # 关键思想：
+        # 1. 如果两个预测很接近（差异小）-> 低分歧熵 -> 高权重
+        # 2. 如果两个预测差异大 -> 高分歧熵 -> 低权重
+        
+        # Args:
+        #     prob1: [bs, 1, h, w] 预测1的概率图
+        #     prob2: [bs, 1, h, w] 预测2的概率图
+            
+        # Returns:
+        #     disagreement_entropy: [bs, 1, h, w] 分歧熵
+        # """
+        # 计算绝对差异
+        diff = torch.abs(prob1 - prob2)  # [bs, 1, h, w]
+        
+        # 方法1：将差异视为二元分布的不确定性
+        # 差异越小，不确定性越低
+        epsilon = 1e-8
+        
+        # 将差异d转化为概率p：p = (1-d)，q = d
+        # 当d=0（完全一致）时，p=1，q=0，熵为0
+        # 当d=0.5（最大分歧）时，p=q=0.5，熵最大
+        p = 1.0 - diff  # 一致性概率
+        q = diff        # 分歧概率
+        
+        # 计算二元熵
+        entropy = -p * torch.log(p + epsilon) - q * torch.log(q + epsilon)
+        
+        # 归一化
+        entropy_normalized = entropy / torch.log(torch.tensor(2.0, device=prob1.device))
+        
+        return entropy_normalized
+    
+    def _compute_confidence_from_entropy(self, entropy_map, method='inverse'):
+        """
+        从熵值计算置信度（熵值越低，置信度越高）
+        Args:
+            entropy_map: [bs, 1, h, w] 熵值图
+            method: 转换方法  
+        Returns:
+            confidence_map: [bs, 1, h, w] 置信度图
+        """
+        if method == 'inverse':
+            # 简单逆变换：置信度 = 1 - 熵
+            confidence = 1.0 - entropy_map
+        
+        elif method == 'exponential':
+            # 指数衰减：exp(-λ*entropy)
+            lambda_val = 5.0  # 衰减系数
+            confidence = torch.exp(-lambda_val * entropy_map)
+        
+        elif method == 'sigmoid':
+            # Sigmoid变换：将熵值映射到置信度
+            # 当熵值高时快速降低置信度
+            confidence = 1.0 / (1.0 + torch.exp(10.0 * (entropy_map - 0.5)))
+        
+        elif method == 'linear_threshold':
+            # 带阈值的线性变换
+            threshold = 0.3
+            confidence = torch.where(
+                entropy_map < threshold,
+                1.0 - entropy_map / threshold,  # 低于阈值，置信度线性下降
+                torch.zeros_like(entropy_map)   # 高于阈值，置信度为0
+            )
+        
+        return confidence
+    
+    def _compute_spatial_similarity(self, feat1, feat2, method='conv'):
+        """计算两个2D特征图的空间相似度"""
+        bs, h, w = feat1.shape
+        
+        if method == 'conv':
+            feat1_unsqueeze = feat1.unsqueeze(1)  # [bs, 1, h, w]
+            feat2_unsqueeze = feat2.unsqueeze(1)  # [bs, 1, h, w]
+            
+            combined = torch.cat([feat1_unsqueeze, feat2_unsqueeze], dim=1)  # [bs, 2, h, w]
+            sim_map = self.similarity_net(combined)  # [bs, 1, h, w]
+            
+        elif method == 'entropy_weighted':
+            # 基于熵的相似度：相似度 = 低熵区域的交集
+            feat1_prob = torch.sigmoid(feat1.unsqueeze(1))  # [bs, 1, h, w]
+            feat2_prob = torch.sigmoid(feat2.unsqueeze(1))  # [bs, 1, h, w]
+            
+            # 计算两个特征的熵
+            entropy1 = self._compute_entropy(feat1_prob)
+            entropy2 = self._compute_entropy(feat2_prob)
+            
+            # 计算低熵区域（高置信度区域）
+            confidence1 = self._compute_confidence_from_entropy(entropy1)
+            confidence2 = self._compute_confidence_from_entropy(entropy2)
+            
+            # 相似度 = 两个高置信度区域的交集
+            sim_map = confidence1 * confidence2
+            
+        return sim_map
+    
+    def _fuse_with_entropy_weighting(self, fused_strong, fused_alter):
+        """
+        Args:
+            fused_strong: [bs, 1, h, w] 与强预测融合的结果
+            fused_alter: [bs, 1, h, w] 与替代预测融合的结果      
+        Returns:
+            w: [bs, 1, h, w] 最终权重图
+        """
+        bs, c, h, w = fused_strong.shape
+        
+        # 1. 计算每个预测的熵和置信度
+        with torch.no_grad():
+            # 转换为概率
+            fused_strong_prob = torch.sigmoid(fused_strong)
+            fused_alter_prob = torch.sigmoid(fused_alter)
+            
+            # 计算熵
+            entropy_strong = self._compute_entropy(fused_strong_prob)
+            entropy_alter = self._compute_entropy(fused_alter_prob)
+            
+            # 计算置信度（熵的逆）
+            confidence_strong = self._compute_confidence_from_entropy(entropy_strong, method='inverse')
+            confidence_alter = self._compute_confidence_from_entropy(entropy_alter, method='inverse')
+             
+        # 4. 方法3：混合策略（基于置信度的加权平均）
+        # 使用softmax进行温度缩放
+        temperature = 0.1  # 温度参数，越小越接近hard selection
+        confidence_stack = torch.cat([confidence_strong, confidence_alter], dim=1)
+        confidence_stack_scaled = confidence_stack / temperature
+        softmax_weights = F.softmax(confidence_stack_scaled, dim=1)
+
+        # 加权平均
+        w = softmax_weights[:, 0:1, :, :] * confidence_strong + \
+                softmax_weights[:, 1:2, :, :] * confidence_alter
+        
+        # 可选：通过卷积网络进一步细化权重
+        # w_refined = self.entropy_refine(w)
+        
+        return w
+    
+    def forward(self, preds, preds_strong, preds_alter):
+        """
+            preds: [bs, 1, h, w] - 主预测
+            preds_strong: [bs, 1, h, w] - 强增强预测
+            preds_alter: [bs, 1, h, w] - 替代预测
+        """
+        bs, c, h, w = preds.shape
+        
+        # 1. 使用交叉注意力融合
+        # attn_output1 = self.cross_attn1(preds, preds_strong)
+        # fused_strong = self.out_proj1(attn_output1)
+        
+        # attn_output2 = self.cross_attn2(preds, preds_alter)
+        # fused_alter = self.out_proj2(attn_output2)
+        fused_strong = self.fuse_conv1(torch.cat([preds, preds_strong], dim=1))
+        fused_alter = self.fuse_conv2(torch.cat([preds, preds_alter], dim=1))
+
+        # 2. 转换为概率
+        fused_strong_prob = torch.sigmoid(fused_strong)
+        fused_alter_prob = torch.sigmoid(fused_alter)
+
+        with torch.no_grad():
+            disagreement_entropy = self._compute_entropy(
+                fused_strong_prob, fused_alter_prob)  # [bs, 1, h, w]
+            # 计算权重：分歧熵越低，权重越高
+            # w = 1 - disagreement_entropy  # 简单逆变换
+            w = torch.exp(-5.0 * disagreement_entropy)  # 指数衰减
+
+        # 3. 计算补集并加权
+        complement = 1.0 - preds
+        complement_weighted = complement * w
+        
+        return w, complement_weighted
+
+
+
 class Mine(nn.Module):
     """
     definition of MINE
@@ -434,10 +658,6 @@ class selective_feature_decoupler(nn.Module):
 
 
 
-
-
-
-
 class Multi_decoder_Net(nn.Module):
     def __init__(self, n_channels, n_classes=1, bilinear=False):
         super(Multi_decoder_Net, self).__init__()
@@ -479,11 +699,12 @@ class Multi_decoder_Net(nn.Module):
         # self.end_conv1 = nn.Conv2d(64, 1, 1).cuda()
         # self.end_conv2 = nn.Conv2d(128, 1, 1).cuda() 
         # self.end_conv3 = nn.Conv2d(256, 1, 1).cuda()
-        self.end_conv1 = nn.Conv2d(64, 1, 1)
-        self.end_conv2 = nn.Conv2d(128, 1, 1) 
-        self.end_conv3 = nn.Conv2d(256, 1, 1)
+        # self.end_conv1 = nn.Conv2d(64, 1, 1)
+        # self.end_conv2 = nn.Conv2d(128, 1, 1) 
+        # self.end_conv3 = nn.Conv2d(256, 1, 1)
 
-        self.fusion = EnhancedFusionWithSqueeze()
+        # self.fusion = EnhancedFusionWithSqueeze()
+        self.fusion = EnhancedFusionWithEntropyWeighting()
         self.sfd = selective_feature_decoupler(1, 1, 256, 256)
 
     # def _calculate_layer_norm(self, layer):
@@ -521,26 +742,26 @@ class Multi_decoder_Net(nn.Module):
         mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter)     ## [bs, 1, 256, 256]
         w, complement_weighted = self.fusion(o_seg1, mask_strong, mask_alter)
 
-        complement_out, loss_mi, unimportant = self.sfd(complement_weighted)
+        # complement_out, loss_mi, unimportant = self.sfd(complement_weighted)
 
         # x1 = self.end_conv1(x1)        ## [bs, 1, 256, 256]
         # x2 = self.end_conv2(x2)        ## [bs, 1, 128, 128]
         # x3 = self.end_conv3(x3)        ## [bs, 1, 64, 64]
 
         # 返回浅层特征用于尾部loss计算
-        return o_seg1, mask_strong, mask_alter, w, complement_out, loss_mi
+        return o_seg1, mask_strong, mask_alter, w, complement_weighted #, complement_out, loss_mi
 
 
 
 
 # unet = Multi_decoder_Net(3)
 # a = torch.rand(1, 3, 256, 256)
-# o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, w, complement_out, loss= unet.forward(a)
+# o_seg1, mask_strong, mask_alter, w, complement_weighted = unet.forward(a)
 # print(o_seg1.size())            # torch.Size([1, 1, 256, 256])
 # print(f_fg.size())      
 # print(f_bg.size())      
 # print(x1.size())                # torch.Size([1, 1, 256, 256])
 # print(x2.size())                # torch.Size([1, 1, 128, 128])
 # print(x3.size())                # torch.Size([1, 1, 64, 64])
-# print(complement_out.size())    # torch.Size([1, 1, 256, 256])
+# print(complement_weighted.size())    # torch.Size([1, 1, 256, 256])
 # print(loss.size())              # []

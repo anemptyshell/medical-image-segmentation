@@ -12,7 +12,7 @@ from libs.base_model import base_model
 from collections import OrderedDict
 
 from Med_image_seg.unet.loss import BceDiceLoss
-from Med_image_seg.unet0107.network import Multi_decoder_Net
+from Med_image_seg.unet0113.network import Multi_decoder_Net
 from Med_image_seg.fang.utils.cldice import clDice
 
 import numpy as np
@@ -31,7 +31,7 @@ def arguments():
     return args
 
 
-class unet0107(base_model):
+class unet0113(base_model):
     def __init__(self, parser):
         super().__init__(parser)
         parser.add_args(arguments())
@@ -300,7 +300,7 @@ class unet0107(base_model):
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
             edge = edge.cuda(non_blocking=True).float()
-            preds, pred_strong, pred_alter, w, complement_out, loss_mi = self.network(images)
+            preds, pred_strong, pred_alter, w, complement_out = self.network(images)
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_strong, ske_strong)
@@ -321,7 +321,7 @@ class unet0107(base_model):
 
             loss_complement = self.BceDiceLoss(complement_out, 1-targets)
 
-            loss = loss1 + 0.5 * loss2 + 0.5 * loss3 + loss_complement + 0.5 * loss_mi
+            loss = loss1 + 0.5 * loss2 + 0.5 * loss3 + loss_complement
             # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement + loss_mi ## 记为lossmi
            
             iou, dice = iou_score(1 - complement_out, targets)
@@ -351,7 +351,6 @@ class unet0107(base_model):
 
         pbar.close()
         self.lr_scheduler.step()
-        # return step
         return OrderedDict([('loss', avg_meters['loss'].avg),
                             ('iou', avg_meters['iou'].avg),
                             ('dice', avg_meters['dice'].avg)])
@@ -381,7 +380,7 @@ class unet0107(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, w, complement_out, loss_mi = self.network(images)
+                preds, pred_strong, pred_alter, w, complement_out = self.network(images)
                 
                 loss = self.BceDiceLoss(1-complement_out, targets)
                 # iou, dice = iou_score(preds, targets)
@@ -453,7 +452,7 @@ class unet0107(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, w, complement_out, loss_mi = self.network(images)
+                preds, pred_strong, pred_alter, w, complement_out = self.network(images)
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(1-complement_out, targets)
                 iou_avg_meter.update(iou, images.size(0))
