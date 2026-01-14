@@ -300,31 +300,16 @@ class unet0113(base_model):
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
             ske_strong, ske_alter = ske_strong.cuda(non_blocking=True).float(), ske_alter.cuda(non_blocking=True).float()
             edge = edge.cuda(non_blocking=True).float()
-            preds, pred_strong, pred_alter, w, complement_out = self.network(images)
+            preds, pred_strong, pred_alter, w, out, loss_mi = self.network(images)
 
             loss1 = self.BceDiceLoss(preds, targets)
             loss2 = self.BceDiceLoss(pred_strong, ske_strong)
             loss3 = self.BceDiceLoss(pred_alter, ske_alter)
+            loss_complement = self.BceDiceLoss(out, targets)
 
-            # 对尾部label进行下采样以匹配不同尺度的特征图
-            # edge_256x256 = edge                                                                        # [2, 1, 256, 256] - 原始尺寸
-            # edge_128x128 = F.interpolate(edge, size=(128, 128), mode='bilinear', align_corners=False)  # [2, 1, 128, 128]
-            # edge_64x64 = F.interpolate(edge, size=(64, 64), mode='bilinear', align_corners=False)      # [2, 1, 64, 64]
-
-            # 计算多尺度尾部损失
-            # edge_loss1 = self.BceDiceLoss(x1, edge_256x256)
-            # edge_loss2 = self.BceDiceLoss(x2, edge_128x128) 
-            # edge_loss3 = self.BceDiceLoss(x3, edge_64x64)
-
-            # 组合尾部损失
-            # edge_loss = norm_weights[0] * edge_loss1 + norm_weights[1] * edge_loss2 + norm_weights[2] * edge_loss3
-
-            loss_complement = self.BceDiceLoss(complement_out, 1-targets)
-
-            loss = loss1 + 0.5 * loss2 + 0.5 * loss3 + loss_complement
-            # loss = loss1 + 0.33 * loss2 + 0.33 * loss3 + 0.33 * edge_loss + loss_complement + loss_mi ## 记为lossmi
+            loss = loss1 + 0.5 * loss2 + 0.5 * loss3 + loss_complement + 0.5*loss_mi
            
-            iou, dice = iou_score(1 - complement_out, targets)
+            iou, dice = iou_score(out, targets)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -380,11 +365,11 @@ class unet0113(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, w, complement_out = self.network(images)
+                preds, pred_strong, pred_alter, w, out, loss_mi = self.network(images)
                 
-                loss = self.BceDiceLoss(1-complement_out, targets)
+                loss = self.BceDiceLoss(out, targets)
                 # iou, dice = iou_score(preds, targets)
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(1-complement_out, targets, epoch)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators(out, targets, epoch)
 
                 avg_meters['loss'].update(loss.item(), images.size(0))
                 avg_meters['iou'].update(iou, images.size(0))
@@ -397,7 +382,7 @@ class unet0113(base_model):
                 avg_meters['sen'].update(sensitivity, images.size(0))
 
                 ########################                                          
-                output = F.sigmoid(1-complement_out)
+                output = F.sigmoid(out)
                 output_ = torch.where(output>0.5,1,0)
                 gt_ = torch.where(targets>0.5,1,0)
                 pred_np = output_.squeeze().cpu().numpy()
@@ -452,9 +437,9 @@ class unet0113(base_model):
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
                 # preds, pred_strong, pred_alter, pred_edge = self.network(images)
-                preds, pred_strong, pred_alter, w, complement_out = self.network(images)
+                preds, pred_strong, pred_alter, w, out, loss_mi = self.network(images)
 
-                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(1-complement_out, targets)
+                iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(out, targets)
                 iou_avg_meter.update(iou, images.size(0))
                 dice_avg_meter.update(dice, images.size(0))
                 hd_avg_meter.update(hd, images.size(0))
@@ -465,7 +450,7 @@ class unet0113(base_model):
                 sensitivity_avg_meter.update(sensitivity, images.size(0))
 
                 ################################################ 
-                output = F.sigmoid(1-complement_out)
+                output = F.sigmoid(out)
                 output_ = torch.where(output>0.5,1,0)
                 gt_ = torch.where(targets>0.5,1,0)
                 pred_np = output_.squeeze().cpu().numpy()
@@ -478,7 +463,7 @@ class unet0113(base_model):
 
                 size = self.args.img_size / 100
                 if iter % self.args.save_interval == 0:
-                    preds_com = torch.sigmoid(1-complement_out).cpu().numpy()
+                    preds_com = torch.sigmoid(out).cpu().numpy()
                     preds_com[preds_com >= 0.5] = 1
                     preds_com[preds_com < 0.5] = 0
                     preds_com = np.squeeze(preds_com, axis=0)
