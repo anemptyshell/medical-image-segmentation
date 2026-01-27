@@ -37,7 +37,7 @@ class options:
         self.parser.add_argument('--gamma', default=2/3, type=float)
         self.parser.add_argument('--early_stopping', default=-1, type=int,
                         metavar='N', help='early stopping (default: -1)')
-        self.parser.add_argument('--cfg', type=str, metavar="FILE", help='path to config file', )
+        # self.parser.add_argument('--cfg', type=str, metavar="FILE", help='path to config file', )
 
         # self.parser.add_argument('--num_workers', default=4, type=int)
 
