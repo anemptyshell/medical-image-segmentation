@@ -170,9 +170,9 @@ def generate_custom_skeleton_alternative(binary_image, a=1):
             mask_radius_leq_a = np.logical_or(mask_radius_leq_a, circle_region)
     
     # 合并结果：半径<=a的区域 + 半径>a的削减区域
-    custom_skeleton = np.logical_or(custom_skeleton, mask_radius_leq_a) 
+    custom_skeleton = np.logical_or(custom_skeleton, mask_radius_leq_a)             # 强化骨架
     # 确保不超过原始血管边界
-    # custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))
+    # custom_skeleton = np.logical_and(custom_skeleton, binary_image.astype(bool))  # 自适应骨架
     
     return custom_skeleton
 

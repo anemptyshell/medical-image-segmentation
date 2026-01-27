@@ -224,7 +224,6 @@ class EnhancedFusionWithSqueeze(nn.Module):
             nn.Conv2d(8, 1, kernel_size=1),
             nn.Sigmoid()
         )
-        self.attention_module = CAFM(feature_dim=64)
     
     def _compute_spatial_similarity(self, feat1, feat2, method='conv'):
         """
@@ -276,7 +275,8 @@ class EnhancedFusionWithSqueeze(nn.Module):
             local_mean2_sq = F.conv2d(feat2_unsq**2, kernel, padding=1, groups=1)
             local_mean12 = F.conv2d(feat1_unsq * feat2_unsq, kernel, padding=1, groups=1)
 
-            # 计算局部方差和协方差
+            # 方差公式：var(X) = E[X²] - E[X]²
+            # 协方差公式：cov(X,Y) = E[XY] - E[X]E[Y]
             local_var1 = local_mean1_sq - local_mean1**2
             local_var2 = local_mean2_sq - local_mean2**2
             local_cov = local_mean12 - local_mean1 * local_mean2
@@ -284,14 +284,9 @@ class EnhancedFusionWithSqueeze(nn.Module):
             eps = 1e-8
             # 计算局部相关系数
             local_corr = local_cov / (torch.sqrt(local_var1 + eps) * torch.sqrt(local_var2 + eps))
-            # 相关系数范围是[-1, 1]，映射到[0, 1]表示相似度
+            # 相关系数范围是[-1, 1]，映射到[0, 1]表示相似度，[-1, 1] → [0, 1]
             sim_map = (local_corr + 1.0) / 2.0  # [bs, 1, h, w]
             
-        elif method == 'inverse_diff':
-            # 基于差异的相似度
-            diff = torch.abs(feat1 - feat2)  # [bs, h, w]
-            sim_map = 1.0 / (1.0 + diff)     # [bs, h, w]
-            sim_map = sim_map.unsqueeze(1)   # [bs, 1, h, w]
             
         return sim_map
     
@@ -303,8 +298,9 @@ class EnhancedFusionWithSqueeze(nn.Module):
         """
         bs, c, h, w = preds.shape
         
-        fused_strong = self.attention_module(preds, preds_strong)
-        fused_alter = self.attention_module(preds, preds_alter)
+        # 1. 融合
+        fused_strong = self.fuse_conv1(torch.cat([preds, preds_strong], dim=1))
+        fused_alter = self.fuse_conv2(torch.cat([preds, preds_alter], dim=1))
         
         # 2. 使用squeeze去掉通道维度，计算空间相似度
         preds_squeezed = preds.squeeze(1)                # [bs, h, w]
@@ -313,25 +309,27 @@ class EnhancedFusionWithSqueeze(nn.Module):
         
         # 计算相似度图
         sim_map1 = self._compute_spatial_similarity(
-            fused_strong_squeezed, preds_squeezed, method='conv'
+            fused_strong_squeezed, preds_squeezed, method='local_correlation'
         )  # [bs, 1, h, w]
         
         sim_map2 = self._compute_spatial_similarity(
-            fused_alter_squeezed, preds_squeezed, method='conv'
+            fused_alter_squeezed, preds_squeezed, method='local_correlation'
         )  # [bs, 1, h, w]
         
         # 3. 选择策略得到权重
+        # 方法A：取最大值
         w = torch.max(sim_map1, sim_map2)  # [bs, 1, h, w]
-        out = w * preds
+        # 方法B：加权平均
+        # w = 0.6 * sim_map1 + 0.4 * sim_map2
+        
+        out = w * preds  # [bs, 1, h, w]
         
         return w, out
-
 
 class Mine(nn.Module):
     """
     definition of MINE
     """
-
     def __init__(self, input_size, hidden_size=200):
         super().__init__()
         self.input_size = input_size
@@ -411,7 +409,7 @@ class PredLabelMutualInfoModule(nn.Module):
             self.pred_encoder = FeatureEncoder(in_channels, out_dim=feature_dim)
             self.label_encoder = FeatureEncoder(in_channels, out_dim=feature_dim)
         
-        # MINE网络 - 输入是拼接后的特征维度
+        # MINE网络
         self.mine_net = Mine(input_size=feature_dim * 2, hidden_size=hidden_size)
         
     def mutual_information(self, joint, marginal):
@@ -439,11 +437,8 @@ class PredLabelMutualInfoModule(nn.Module):
         label: 标签图 [bs, 1, 512, 512]，应该是0/1二值图
         return: (pred_feat, loss_mi, label_feat)
         """
-        # 1. 提取高级特征
         pred_feat = self.pred_encoder(pred)      # [bs, feature_dim]
         label_feat = self.label_encoder(label)   # [bs, feature_dim]
-        print(label_feat.size())  
-        print('+++++++')
         
         # 2. 构建联合样本（保持配对关系）
         joint = torch.cat([pred_feat, label_feat], dim=1)  # [bs, 2*feature_dim]
@@ -468,333 +463,7 @@ class PredLabelMutualInfoModule(nn.Module):
         return pred_feat, loss_mi, label_feat
 
 
-class selective_feature_decoupler(nn.Module):
-    """
-    definition of SFD
-    """
 
-    def __init__(self, in_c, out_c, in_h, in_w):
-        super().__init__()
-        self.in_c = in_c
-        self.out_c = out_c
-        self.in_h = in_h
-        self.in_w = in_w
-
-        # 3*3CBR 2
-        self.c1 = nn.Sequential(
-            CBR(in_c, in_c, kernel_size=3, padding=1),
-            CBR(in_c, out_c, kernel_size=3, padding=1)
-        )
-        # 3*3CBR 2
-        self.c2 = nn.Sequential(
-            CBR(in_c, in_c, kernel_size=3, padding=1),
-            CBR(in_c, out_c, kernel_size=3, padding=1)
-        )
-
-        # before MINE, reduce channel and size
-        self.reduce_c = nn.Sequential(
-            CBR(out_c, 16, kernel_size=1, padding=0),
-            nn.MaxPool2d(2, stride=2)
-        )
-
-        # init MINE
-        self.mine_net = Mine(input_size=16 * (in_h // 2) * (in_w // 2) * 2)
-        # self.mine_net = Mine(input_size=524288)
-
-    def mutual_information(self, joint, marginal):
-        # joint = joint.float().cuda() if torch.cuda.is_available() else joint.float()
-        # marginal = marginal.float().cuda() if torch.cuda.is_available() else marginal.float()
-        joint = joint.float() 
-        marginal = marginal.float() 
-        # print('******************')
-        # print(joint.size())     
-
-        t = self.mine_net(joint)
-        et = torch.exp(self.mine_net(marginal))
-        mi_lb = torch.mean(t) - torch.log(1 + torch.mean(et))
-
-        return mi_lb
-
-    def forward(self, x):
-        # x:[B,C,H,W]
-        s = self.c1(x)  # significant feature
-        u = self.c2(x)  # unimportant feature
-        # print(s.size())  ## 2, 64, 256, 256
-
-        # reduce channel
-        s_16 = self.reduce_c(s)
-        u_16 = self.reduce_c(u)
-        # print(s_16.size())  ## 2, 16, 128, 128
-
-        # flatten s and u
-        s_flat = torch.flatten(s_16, start_dim=1)
-        u_flat = torch.flatten(u_16, start_dim=1)
-        # print(s_flat.size())  ## 2, 262144
-
-        # create joint and marginal
-        joint = torch.cat([s_flat, u_flat], dim=1)
-        marginal = torch.cat([s_flat, torch.roll(u_flat, shifts=1, dims=0)], dim=1)
-        # print('---------------------')
-        # print(joint.size())    ## [2, 524288]
-
-        # calculate mi loss
-        mi_lb = self.mutual_information(joint, marginal)
-        loss_mi = mi_lb
-
-        # sigmoid
-        loss_mi = torch.sigmoid(loss_mi)
-
-        return s, loss_mi, u
-
-
-class MutualAttentionModule(nn.Module):
-    def __init__(self, hidden_dim=32):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.feature_proj = nn.Conv2d(1, hidden_dim, kernel_size=1)
-        
-        # 双向注意力后的融合
-        self.fusion = nn.Sequential(
-            nn.Conv2d(hidden_dim * 2, hidden_dim, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(hidden_dim, 1, kernel_size=1),
-            nn.Sigmoid()
-        )
-        
-    def forward(self, pred1, pred2):
-        # 提取特征
-        feat1 = self.feature_proj(pred1)  # [bs, C, H, W]
-        feat2 = self.feature_proj(pred2)
-        
-        # 展平
-        B, C, H, W = feat1.shape
-        feat1_flat = feat1.flatten(2)  # [B, C, N]
-        feat2_flat = feat2.flatten(2)  # [B, C, N]
-        N = H * W
-        
-        # ========== 真正的双向注意力 ==========
-        # 1. pred1 -> pred2 的注意力
-        attn_1_to_2 = torch.bmm(feat1_flat.transpose(1, 2), feat2_flat)  # [B, N, N]
-        attn_1_to_2 = F.softmax(attn_1_to_2 / (C ** 0.5), dim=-1)
-        feat1_enhanced_by_2 = torch.bmm(attn_1_to_2, feat2_flat.transpose(1, 2)).transpose(1, 2)  # [B, C, N]
-        
-        # 2. pred2 -> pred1 的注意力  
-        attn_2_to_1 = torch.bmm(feat2_flat.transpose(1, 2), feat1_flat)  # [B, N, N]
-        attn_2_to_1 = F.softmax(attn_2_to_1 / (C ** 0.5), dim=-1)
-        feat2_enhanced_by_1 = torch.bmm(attn_2_to_1, feat1_flat.transpose(1, 2)).transpose(1, 2)  # [B, C, N]
-        
-        # 3. 合并双向增强的特征
-        feat1_final = feat1_flat + feat1_enhanced_by_2  # 残差连接
-        feat2_final = feat2_flat + feat2_enhanced_by_1
-        
-        # 重塑
-        feat1_final = feat1_final.view(B, C, H, W)
-        feat2_final = feat2_final.view(B, C, H, W)
-        
-        # 4. 融合两个视图
-        fused = torch.cat([feat1_final, feat2_final], dim=1)
-        similarity = self.fusion(fused)
-        
-        return similarity
-
-class MutualAttentionModule_light(nn.Module):
-    def __init__(self, hidden_dim=32, window_size=32):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.window_size = window_size
-        
-        # 特征投影
-        self.feature_proj = nn.Conv2d(1, hidden_dim, kernel_size=1)
-        
-        # 窗口注意力
-        self.window_attention = nn.MultiheadAttention(
-            embed_dim=hidden_dim,
-            num_heads=4,
-            batch_first=True
-        )
-        
-        # 融合层（更轻量）
-        self.fusion = nn.Sequential(
-            nn.Conv2d(hidden_dim * 2, hidden_dim // 2, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(hidden_dim // 2, 1, kernel_size=1),
-            nn.Sigmoid()
-        )
-        
-    def forward(self, pred1, pred2):
-        # 提取特征
-        feat1 = self.feature_proj(pred1)  # [B, C, H, W]
-        feat2 = self.feature_proj(pred2)
-        
-        B, C, H, W = feat1.shape
-        output = torch.zeros_like(pred1)
-        
-        # 分窗口处理
-        for i in range(0, H, self.window_size):
-            for j in range(0, W, self.window_size):
-                # 提取窗口
-                h_end = min(i + self.window_size, H)
-                w_end = min(j + self.window_size, W)
-                
-                window1 = feat1[:, :, i:h_end, j:w_end]  # [B, C, h, w]
-                window2 = feat2[:, :, i:h_end, j:w_end]
-                
-                B_w, C_w, H_w, W_w = window1.shape
-                
-                # 展平窗口 [B, C, H*W] -> [B, H*W, C]
-                window1_flat = window1.flatten(2).transpose(1, 2)  # [B, N_w, C]
-                window2_flat = window2.flatten(2).transpose(1, 2)  # [B, N_w, C]
-                
-                # 双向注意力（使用多头注意力）
-                # window1关注window2
-                attn_output1, _ = self.window_attention(
-                    window1_flat, window2_flat, window2_flat
-                )  # [B, N_w, C]
-                
-                # window2关注window1
-                attn_output2, _ = self.window_attention(
-                    window2_flat, window1_flat, window1_flat
-                )  # [B, N_w, C]
-                
-                # 重塑回窗口形状
-                window1_attended = attn_output1.transpose(1, 2).view(B, C_w, H_w, W_w)
-                window2_attended = attn_output2.transpose(1, 2).view(B, C_w, H_w, W_w)
-                
-                # 融合
-                window_fused = torch.cat([window1_attended, window2_attended], dim=1)
-                window_similarity = self.fusion(window_fused)  # [B, 1, H_w, W_w]
-                
-                # 填充到输出
-                output[:, :, i:h_end, j:w_end] = window_similarity
-        
-        return output
-
-
-class CAFM(nn.Module):
-    """交叉注意力模块，两输入一输出[bs, 1, h, w]"""
-    def __init__(self, feature_dim=64):
-        super(CAFM, self).__init__()
-        self.feature_dim = feature_dim
-        
-        # 将单通道扩展到特征维度
-        self.expand = nn.Sequential(
-            nn.Conv2d(1, feature_dim, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True)
-        )
-        
-        # 通道注意力相关层（类似原始代码）
-        self.avg1 = nn.Conv2d(feature_dim, feature_dim // 2, 1, stride=1, padding=0)
-        self.avg2 = nn.Conv2d(feature_dim, feature_dim // 2, 1, stride=1, padding=0)
-        self.max1 = nn.Conv2d(feature_dim, feature_dim // 2, 1, stride=1, padding=0)
-        self.max2 = nn.Conv2d(feature_dim, feature_dim // 2, 1, stride=1, padding=0)
-        
-        self.avg11 = nn.Conv2d(feature_dim // 2, feature_dim, 1, stride=1, padding=0)
-        self.avg22 = nn.Conv2d(feature_dim // 2, feature_dim, 1, stride=1, padding=0)
-        self.max11 = nn.Conv2d(feature_dim // 2, feature_dim, 1, stride=1, padding=0)
-        self.max22 = nn.Conv2d(feature_dim // 2, feature_dim, 1, stride=1, padding=0)
-        
-        # 空间注意力
-        self.conv1_spatial = nn.Conv2d(2, 1, 3, stride=1, padding=1, groups=1)
-        self.conv2_spatial = nn.Conv2d(1, 1, 3, stride=1, padding=1, groups=1)
-        
-        # 相关性融合（将两个注意力特征融合为一个）
-        self.correlation_fusion = nn.Sequential(
-            nn.Conv2d(feature_dim, feature_dim // 2, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(feature_dim // 2, 1, kernel_size=1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, f1, f2):
-        """
-        输入: f1, f2 [bs, 1, h, w]
-        输出: 相关性权重图 [bs, 1, h, w]
-        """
-        b, c, h, w = f1.size()
-
-        # 1. 扩展通道维度
-        f1_expanded = self.expand(f1)  # [bs, feature_dim, h, w]
-        f2_expanded = self.expand(f2)
-        
-        # 展平空间维度
-        f1_flat = f1_expanded.reshape([b, self.feature_dim, -1])
-        f2_flat = f2_expanded.reshape([b, self.feature_dim, -1])
-
-        # 2. 通道注意力（提取全局特征）
-        # 对f1
-        avg_1 = torch.mean(f1_flat, dim=-1, keepdim=True).unsqueeze(-1)  # [bs, feature_dim, 1, 1]
-        max_1, _ = torch.max(f1_flat, dim=-1, keepdim=True)
-        max_1 = max_1.unsqueeze(-1)
-
-        avg_1 = F.relu(self.avg1(avg_1))  # [bs, feature_dim//2, 1, 1]
-        max_1 = F.relu(self.max1(max_1))
-        avg_1 = self.avg11(avg_1).squeeze(-1)  # [bs, feature_dim, 1]
-        max_1 = self.max11(max_1).squeeze(-1)
-        a1 = avg_1 + max_1  # [bs, feature_dim, 1]
-
-        # 对f2
-        avg_2 = torch.mean(f2_flat, dim=-1, keepdim=True).unsqueeze(-1)
-        max_2, _ = torch.max(f2_flat, dim=-1, keepdim=True)
-        max_2 = max_2.unsqueeze(-1)
-
-        avg_2 = F.relu(self.avg2(avg_2))
-        max_2 = F.relu(self.max2(max_2))
-        avg_2 = self.avg22(avg_2).squeeze(-1)
-        max_2 = self.max22(max_2).squeeze(-1)
-        a2 = avg_2 + max_2  # [bs, feature_dim, 1]
-
-        # 3. 交叉注意力计算
-        cross = torch.bmm(a1, a2.transpose(1, 2))  # [bs, feature_dim, feature_dim]
-
-        # 4. 应用交叉注意力（两个方向）
-        a1_attended = torch.bmm(F.softmax(cross, dim=-1), f1_flat)  # f1关注f2
-        a2_attended = torch.bmm(F.softmax(cross.transpose(1, 2), dim=-1), f2_flat)  # f2关注f1
-
-        # 5. 重塑回2D
-        a1_attended = a1_attended.reshape([b, self.feature_dim, h, w])
-        a2_attended = a2_attended.reshape([b, self.feature_dim, h, w])
-
-        # 6. 空间注意力（增强空间重要性）
-        # 对f1的注意力特征应用空间注意力
-        avg_out1 = torch.mean(a1_attended, dim=1, keepdim=True)  # [bs, 1, h, w]
-        max_out1, _ = torch.max(a1_attended, dim=1, keepdim=True)
-        spatial_input1 = torch.cat([avg_out1, max_out1], dim=1)  # [bs, 2, h, w]
-        spatial_att1 = F.relu(self.conv1_spatial(spatial_input1))
-        spatial_att1 = self.conv2_spatial(spatial_att1)
-        spatial_att1 = spatial_att1.reshape([b, 1, -1])
-        spatial_att1 = F.softmax(spatial_att1, dim=-1)  # [bs, 1, h*w]
-        spatial_att1 = spatial_att1.reshape([b, 1, h, w])  # [bs, 1, h, w]
-
-        # 对f2的注意力特征应用空间注意力
-        avg_out2 = torch.mean(a2_attended, dim=1, keepdim=True)
-        max_out2, _ = torch.max(a2_attended, dim=1, keepdim=True)
-        spatial_input2 = torch.cat([avg_out2, max_out2], dim=1)
-        spatial_att2 = F.relu(self.conv1_spatial(spatial_input2))
-        spatial_att2 = self.conv2_spatial(spatial_att2)
-        spatial_att2 = spatial_att2.reshape([b, 1, -1])
-        spatial_att2 = F.softmax(spatial_att2, dim=-1)
-        spatial_att2 = spatial_att2.reshape([b, 1, h, w])
-
-        # 7. 应用空间注意力权重
-        # 这里我们计算相关性：两个经过注意力加权的特征的相似度
-        # 计算加权特征
-        a1_weighted = a1_attended * spatial_att1  # 空间注意力加权
-        a2_weighted = a2_attended * spatial_att2
-        
-        # 8. 计算相关性（两个加权特征的相似度）
-        # 将两个加权特征相加作为相关性特征
-        correlation_feature = (a1_weighted + a2_weighted) / 2
-        
-        # 9. 生成最终相关性图
-        correlation_map = self.correlation_fusion(correlation_feature)  # [bs, 1, h, w]
-        
-        return correlation_map
-
-
-
-
-
-"""交叉注意力 + cos相似度 +  /"""
 class Multi_decoder_Net(nn.Module):
     def __init__(self, n_channels, n_classes=1, bilinear=False):
         super(Multi_decoder_Net, self).__init__()
@@ -811,37 +480,24 @@ class Multi_decoder_Net(nn.Module):
 
         # decoder
         self.up1_1 = Up(1024, 512, bilinear)
-        self.up1_2 = Up(1024, 512, bilinear)
-        self.up1_3 = Up(1024, 512, bilinear)
-
         self.up2_1 = Up(512, 256, bilinear)
-        self.up2_2 = Up(512, 256, bilinear)
-        self.up2_3 = Up(512, 256, bilinear)
-
         self.up3_1 = Up(256, 128, bilinear)
-        self.up3_2 = Up(256, 128, bilinear)
-        self.up3_3 = Up(256, 128, bilinear)
-
         self.up4_1 = Up(128, 64, bilinear)
-        self.up4_2 = Up(128, 64, bilinear)
-        self.up4_3 = Up(128, 64, bilinear)
-
         self.out_1 = OutConv(64, n_classes)
-        self.out_2 = OutConv(64, n_classes)
-        self.out_3 = OutConv(64, n_classes)
 
         self.decouple_layer = DecoupleLayer(1024, 128)
         self.aux_head = AuxiliaryHead(128)
+
+        self.end_conv1 = nn.Conv2d(64, 1, 1)
+        self.end_conv2 = nn.Conv2d(128, 1, 1) 
+        self.end_conv3 = nn.Conv2d(256, 1, 1)
 
         self.fusion = EnhancedFusionWithSqueeze()
         self.mi_module = PredLabelMutualInfoModule(
                                 in_channels=1,     
                                 feature_dim=128,
                                 use_shared_encoder=True)
-        self.end_conv1 = nn.Conv2d(64, 1, 1)
-        self.end_conv2 = nn.Conv2d(128, 1, 1) 
-        self.end_conv3 = nn.Conv2d(256, 1, 1)
-    
+
     def _calculate_layer_norm(self, layer):
         """实时计算层的参数范数"""
         total_norm = 0.0
@@ -864,7 +520,7 @@ class Multi_decoder_Net(nn.Module):
         norm3 = self._calculate_layer_norm(self.down2)    # x3对应的层
 
         norms_tensor = torch.tensor([norm1, norm2, norm3], device=x.device, dtype=x.dtype)
-        norm_weights = norms_tensor / norms_tensor.sum()
+        norm_weights = norms_tensor / norms_tensor.sum()  
     
         # decoder
         o_4_1 = self.up1_1(x5, x4)                        ## [bs, 512, 32, 32]   
@@ -876,27 +532,29 @@ class Multi_decoder_Net(nn.Module):
         ske_strong, ske_alter = self.decouple_layer(x5)                    ## [bs, 128, 16, 16]
         mask_strong, mask_alter = self.aux_head(ske_strong, ske_alter)     ## [bs, 1, 256, 256]
         w, out = self.fusion(o_seg1, mask_strong, mask_alter)
+
         pred_sigmoid = torch.sigmoid(out)
         _, loss_mi, _ = self.mi_module(pred_sigmoid, label)
 
-        x1 = self.end_conv1(x1)       
-        x2 = self.end_conv2(x2)        
-        x3 = self.end_conv3(x3)        
+        # 返回浅层特征用于差集图loss计算
+        x1 = self.end_conv1(x1)        ## [bs, 1, 256, 256]
+        x2 = self.end_conv2(x2)        ## [bs, 1, 128, 128]
+        x3 = self.end_conv3(x3)        ## [bs, 1, 64, 64]
 
-        return o_seg1, mask_strong, mask_alter, w, out, loss_mi, x1,x2,x3
+        return o_seg1, mask_strong, mask_alter, x1, x2, x3, norm_weights, w, out, loss_mi
 
 
 
 
-# unet = Multi_decoder_Net(3)
-# a = torch.rand(1, 3, 512, 512)
-# b = torch.rand(1, 1, 512, 512)
-# o_seg1, mask_strong, mask_alter, w, out = unet.forward(a, b)
-# print(o_seg1.size())            # torch.Size([1, 1, 256, 256])
+unet = Multi_decoder_Net(3)
+a = torch.rand(1, 3, 256, 256)
+label = torch.rand(1, 1, 256, 256)
+o_seg1, f_fg, f_bg, x1, x2, x3, norm_weights, w, out, loss= unet.forward(a, label)
+print(o_seg1.size())            # torch.Size([1, 1, 256, 256])
 # print(f_fg.size())      
 # print(f_bg.size())      
 # print(x1.size())                # torch.Size([1, 1, 256, 256])
 # print(x2.size())                # torch.Size([1, 1, 128, 128])
 # print(x3.size())                # torch.Size([1, 1, 64, 64])
-# print(complement_weighted.size())    # torch.Size([1, 1, 256, 256])
+# print(complement_out.size())    # torch.Size([1, 1, 256, 256])
 # print(loss.size())              # []
