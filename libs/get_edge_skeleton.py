@@ -3,7 +3,7 @@ import cv2
 import itertools
 import matplotlib.pyplot as plt
 import os
-from skimage import morphology
+# from skimage import morphology
 from scipy.ndimage import distance_transform_edt
 from skimage.morphology import skeletonize
 
@@ -176,6 +176,57 @@ def generate_custom_skeleton_alternative(binary_image, a=1):
     
     return custom_skeleton
 
+
+
+def generate_enhanced_skeleton(binary_image, alpha=3):
+    """
+    生成强化骨架图 (Enhanced Skeleton Map)。
+
+    参数:
+    - binary_image: 二值血管标签图，前景为1，背景为0。
+    - alpha: 最大信任半径，决定强化骨架的加粗宽度。
+
+    返回:
+    - G_enh: 强化骨架图，与输入同尺寸的二值图。
+    """
+    # 1. 计算中心线骨架
+    skeleton = skeletonize(binary_image)
+    y_coords, x_coords = np.where(skeleton)
+    
+    y_grid, x_grid = np.indices(binary_image.shape)
+    G_enh = np.zeros_like(binary_image, dtype=bool)
+    
+    for y, x in zip(y_coords, x_coords):
+        dist_to_center = np.sqrt((y_grid - y)**2 + (x_grid - x)**2)
+        circle_region = dist_to_center <= alpha
+        G_enh = np.logical_or(G_enh, circle_region)
+    
+    return G_enh.astype(np.uint8)
+
+
+def generate_skeleton_diff(binary_image, alpha=3, beta=2):
+    """
+    生成骨架差集图 (Skeleton Difference Map)。
+
+    参数:
+    - binary_image: 二值血管标签图。
+    - alpha: 用于生成强化骨架图的信任半径。
+    - beta: 用于生成自适应骨架图的尺度阈值。
+
+    返回:
+    - G_diff: 骨架差集图，代表宽度渐变区域。
+    """
+    # 1. 生成强化骨架图
+    G_enh = generate_enhanced_skeleton(binary_image, alpha)
+    
+    # 2. 生成自适应骨架图 (使用你提供的函数)
+    G_ada = generate_custom_skeleton_alternative(binary_image, a=beta)
+    
+    # 3. 计算差集: G_enh 减去 G_ada
+    # 注意：在二值逻辑中，差集等价于 G_enh AND (NOT G_ada)
+    G_diff = np.logical_and(G_enh, np.logical_not(G_ada))
+    
+    return G_diff.astype(np.uint8)
 
 
 
