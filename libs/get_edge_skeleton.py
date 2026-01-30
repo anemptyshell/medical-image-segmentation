@@ -328,11 +328,11 @@ if __name__ == '__main__':
     # for a in [2.5, 3, 3.5, 4]:
     #     skeleton_extract(train_er, a)
 
-    for a in [1, 1.5, 2, 2.5]:
+    for a in [3, 4, 5]:
         enh_extract(train_er, a)
-    for a in [1, 1.5, 2, 2.5]:
+    for a in [3, 4, 5]:
         enh_extract(train_er2, a)
-    for a in [1, 1.5, 2, 2.5]:
+    for a in [3, 4, 5]:
         enh_extract(train_er3, a)
 
     # train_er1 = "/home/my/data/DRIVE/train/"
