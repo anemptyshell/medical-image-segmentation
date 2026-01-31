@@ -13,7 +13,7 @@ from collections import OrderedDict
 from Med_image_seg.unet.loss import BceDiceLoss
 from Med_image_seg.unet.network import U_Net
 from Med_image_seg.fang.utils.cldice import clDice
-from Med_image_seg.unet.cam import U_Net_Attention_Visualizer
+# from Med_image_seg.unet.cam import U_Net_Attention_Visualizer
 
 # from matplotlib import pyplot as plt
 import numpy as np
@@ -21,7 +21,9 @@ import pandas as pd
 import cv2
 from matplotlib import pyplot as plt
 
-
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from pytorch_grad_cam.utils.image import show_cam_on_image
 
 def arguments():
     args = {
@@ -326,30 +328,31 @@ class unet(base_model):
         specificity_avg_meter = AverageMeter()
         precision_avg_meter = AverageMeter()
         sensitivity_avg_meter = AverageMeter()
-        visualizer = U_Net_Attention_Visualizer(self.network)
+        # visualizer = U_Net_Attention_Visualizer(self.network)
+        target_layers = [self.network.Conv_1x1]
+        cam = GradCAM(model=self.network, target_layers=target_layers)
 
-        with torch.no_grad():
-            for iter, data in enumerate(tqdm(test_loader)):
-                images, targets = data
-                images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
-                
-
+        # with torch.no_grad():
+        for iter, data in enumerate(tqdm(test_loader)):
+            images, targets = data
+            images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
+            with torch.no_grad():
                 preds = self.network(images)
 
-                save_dir = "./attention_visualization"
-                os.makedirs(save_dir, exist_ok=True)
+                # save_dir = "./attention_visualization"
+                # os.makedirs(save_dir, exist_ok=True)
                 
-                # 提供完整的保存路径
-                save_path = f"{save_dir}/attention_batch{iter}.png"
-                print("使用均值方法可视化注意力热图...")
-                attention_map = visualizer.visualize(images, method='mean', 
-                                                     save_path=save_path)
+                # # 提供完整的保存路径
+                # save_path = f"{save_dir}/attention_batch{iter}.png"
+                # print("使用均值方法可视化注意力热图...")
+                # attention_map = visualizer.visualize(images, method='mean', 
+                #                                      save_path=save_path)
 
-                # 方法2：使用多种方法比较
-                print("\n使用多种方法比较注意力热图...")
-                visualizer.visualize_multiple_methods(images, 
-                                                     methods=['mean', 'max', 'std', 'l2_norm'],
-                                                     save_path=save_path)
+                # # 方法2：使用多种方法比较
+                # print("\n使用多种方法比较注意力热图...")
+                # visualizer.visualize_multiple_methods(images, 
+                #                                      methods=['mean', 'max', 'std', 'l2_norm'],
+                #                                      save_path=save_path)
 
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
@@ -392,11 +395,35 @@ class unet(base_model):
                     plt.axis('off')  # 关闭坐标轴
                     plt.savefig(self.args.res_dir +'/'+ str(iter) +'.png')
                     plt.close()
+            
+            if iter % 10 == 0: 
+                # 开启梯度计算
+                with torch.set_grad_enabled(True):
+                    # 选择输入：取 Batch 中的第一张图并增加 batch 维度 [1, 3, H, W]
+                    input_tensor = images[0:1] 
 
+                    # 指定目标：针对输出通道 0 (如果是多类分割，可以更换 index)
+                    # ClassifierOutputTarget 对于分割模型，默认会聚合空间像素的梯度
+                    cam_targets = [ClassifierOutputTarget(0)]
 
-                # if iter % self.args.save_interval == 0:
-                #     save_path = self.args.res_dir
-                #     self.save_img(images, targets, output_, iter, save_path)
+                    # 计算 CAM (grayscale_cam 的维度是 [1, H, W])
+                    grayscale_cam = cam(input_tensor=input_tensor, targets=cam_targets)
+                    grayscale_cam = grayscale_cam[0, :]
+
+                    # 转换原图用于叠加 (从 Tensor 转为 Numpy RGB)
+                    img_to_show = input_tensor[0].permute(1, 2, 0).cpu().numpy()
+                    # 归一化到 [0, 1] 方便显示
+                    img_to_show = (img_to_show - img_to_show.min()) / (img_to_show.max() - img_to_show.min() + 1e-8)
+
+                    # 叠加生成热图
+                    visualization = show_cam_on_image(img_to_show, grayscale_cam, use_rgb=True)
+
+                    # 保存或处理热图
+                    # cv2.imwrite(f"{save_path}/cam_{iter}.png", visualization[:, :, ::-1]) # RGB 转 BGR 保存
+
+                    # if iter % self.args.save_interval == 0:
+                    #     save_path = self.args.res_dir
+                    #     self.save_img(images, targets, output_, iter, save_path)
 
         print('IoU: %.4f' % iou_avg_meter.avg)
         print('Dice: %.4f' % dice_avg_meter.avg)
