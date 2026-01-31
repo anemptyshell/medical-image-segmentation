@@ -395,10 +395,10 @@ class EPSS(base_model):
                         'stage4': u4
                     }
 
-                    for name, feat_map in stages.items():
-                        save_path = f'{self.args.res_dir}/features/{name}/iter_{iter}.png'
-                        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                        visualize_feature_maps_mean(feat_map, save_path)
+                    # for name, feat_map in stages.items():
+                    #     save_path = f'{self.args.res_dir}/features/{name}/iter_{iter}.png'
+                    #     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                    #     visualize_feature_maps_mean(feat_map, save_path)
                 
                 # if iter % self.args.save_interval == 0:
                 #     save_path = self.args.res_dir

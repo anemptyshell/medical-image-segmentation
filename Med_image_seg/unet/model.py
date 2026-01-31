@@ -13,6 +13,7 @@ from collections import OrderedDict
 from Med_image_seg.unet.loss import BceDiceLoss
 from Med_image_seg.unet.network import U_Net
 from Med_image_seg.fang.utils.cldice import clDice
+from Med_image_seg.unet.cam import U_Net_Attention_Visualizer
 
 # from matplotlib import pyplot as plt
 import numpy as np
@@ -325,6 +326,7 @@ class unet(base_model):
         specificity_avg_meter = AverageMeter()
         precision_avg_meter = AverageMeter()
         sensitivity_avg_meter = AverageMeter()
+        visualizer = U_Net_Attention_Visualizer(self.network)
 
         with torch.no_grad():
             for iter, data in enumerate(tqdm(test_loader)):
@@ -333,6 +335,22 @@ class unet(base_model):
                 
 
                 preds = self.network(images)
+
+                save_dir = "./attention_visualization"
+                os.makedirs(save_dir, exist_ok=True)
+                
+                # 提供完整的保存路径
+                save_path = f"{save_dir}/attention_batch{iter}.png"
+                print("使用均值方法可视化注意力热图...")
+                attention_map = visualizer.visualize(images, method='mean', 
+                                                     save_path=save_path)
+
+                # 方法2：使用多种方法比较
+                print("\n使用多种方法比较注意力热图...")
+                visualizer.visualize_multiple_methods(images, 
+                                                     methods=['mean', 'max', 'std', 'l2_norm'],
+                                                     save_path=save_path)
+
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
