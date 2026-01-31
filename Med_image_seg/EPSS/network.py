@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-# from Med_image_seg.EPSS.resnet import resnet50
-from resnet import resnet50
+from Med_image_seg.EPSS.resnet import resnet50
+# from resnet import resnet50
 import torch.nn.functional as F
 
 
@@ -426,11 +426,11 @@ class epss_net(nn.Module):
         return y1, edge_pred, loss_mi1, loss_mi2, loss_mi3, loss_mi4, s1,s2,s3,s4,u1,u2,u3,u4
 
 
-epss = epss_net()
-a = torch.rand(1, 3, 512, 512)
-y1, edge_pred, loss_mi1, loss_mi2, loss_mi3, loss_mi4, s1,s2,s3,s4,u1,u2,u3,u4 = epss.forward(a)
-print(y1.size())
-print(s1.size())
-print(s2.size())
-print(s3.size())
-print(s4.size())
+# epss = epss_net()
+# a = torch.rand(1, 3, 512, 512)
+# y1, edge_pred, loss_mi1, loss_mi2, loss_mi3, loss_mi4, s1,s2,s3,s4,u1,u2,u3,u4 = epss.forward(a)
+# print(y1.size())
+# print(s1.size())
+# print(s2.size())
+# print(s3.size())
+# print(s4.size())

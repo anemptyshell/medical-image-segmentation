@@ -174,4 +174,4 @@ cd ~/mis-ft/medical-image-segmentation
 
 
 # python main.py --dataset CHASE_DB1 --epochs 300 --phase train --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_1 lr0.0085 --print_interval 1 --save_interval 1 
-python main.py --dataset CHASE_DB1 --epochs 300 --phase test --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_1 lr0.0085 --print_interval 1 --save_interval 1 
+python main.py --dataset CHASE_DB1 --epochs 300 --phase test --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_end 1 --print_interval 1 --save_interval 1 
