@@ -36,7 +36,7 @@ class RetinaPreprocessor:
         self.clahe_grid_size = (8, 8)
         
         # 伽马校正参数
-        self.gamma = 0.8  # gamma < 1 提亮图像，gamma > 1 变暗图像
+        self.gamma = 0.5  # gamma < 1 提亮图像，gamma > 1 变暗图像
     
     def convert_to_grayscale(self, image):
         """
@@ -77,9 +77,16 @@ class RetinaPreprocessor:
             return image_float.astype(np.uint8)
         
         # 归一化到0-255范围
-        normalized = ((image_float - min_val) / (max_val - min_val)) * 255
+        # normalized = ((image_float - min_val) / (max_val - min_val)) * 255
+
+        self.mean = 156.2899
+        self.std = 26.5457
+        img_normalized = (image_float-self.mean)/self.std
+        # img_normalized = ((img_normalized - np.min(img_normalized)) 
+        #                     / (np.max(img_normalized)-np.min(img_normalized))) * 255.
+        # normalized = ((image_float - np.mean(image_float)) / (np.std(image_float) + 1e-8))
         
-        return normalized.astype(np.uint8)
+        return img_normalized.astype(np.uint8)
     
     def apply_clahe(self, image):
         """
@@ -256,7 +263,7 @@ class RetinaPreprocessor:
         处理输入目录中的所有图像
         """
         # 获取所有支持的图像文件
-        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
+        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.ppm']
         image_files = []
         
         for ext in image_extensions:
@@ -312,8 +319,11 @@ class RetinaPreprocessor:
 # 使用示例
 if __name__ == "__main__":
     # 配置路径
-    input_directory = "path/to/your/retina/images"  # 请修改为您的图像目录
-    output_directory = "path/to/your/output/directory"  # 请修改为输出目录
+    input_directory = "/home/my/data/CHASE_DB1/train/images"  # 请修改为您的图像目录
+    output_directory = "/home/my/data/CHASE_DB1/train/data_aug"  # 请修改为输出目录
+
+    if not os.path.exists(output_directory):
+        os.makedirs(output_directory)  
     
     # 创建预处理器并运行
     preprocessor = RetinaPreprocessor(input_directory, output_directory)

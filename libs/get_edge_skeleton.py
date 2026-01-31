@@ -313,6 +313,46 @@ def enh_extract(root, a):
     return 0
  
 
+def diff_extract(root, a, b):
+    img_root = os.path.join(root, 'masks')
+    skeleton_root = os.path.join(root, f'diff_{a}_{b}')
+    
+    if not os.path.exists(skeleton_root):
+        os.makedirs(skeleton_root)  
+
+    file_names = os.listdir(img_root)
+    for name in file_names:
+        img_path = os.path.join(img_root, name)
+        if name.lower().endswith('.gif'):
+            cap = cv2.VideoCapture(img_path)
+            ret, img = cap.read()
+            cap.release()
+            if not ret:
+                print(f"无法读取GIF图像: {name}")
+                continue
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            img = cv2.imread(img_path, -1)
+            if img is None:
+                print(f"无法读取图像: {name}")
+                continue
+        img = img.astype(np.uint8)
+        img[img <= 100] = 0
+        img[img > 100] = 1
+        custom_skeleton = generate_skeleton_diff(img, alpha=a, beta=b)
+        custom_skeleton_uint8 = custom_skeleton.astype(np.uint8) * 255
+
+        base_name = os.path.splitext(name)[0]
+        output_name = f"{base_name}.png"
+        save_path = os.path.join(skeleton_root, output_name)
+
+        if cv2.imwrite(save_path, custom_skeleton_uint8):
+            print(f"成功保存骨架图像: {save_path}")
+        else:
+            print(f"保存骨架图像失败: {save_path}")
+    
+    return 0
+
 
 
 if __name__ == '__main__':
@@ -328,12 +368,12 @@ if __name__ == '__main__':
     # for a in [2.5, 3, 3.5, 4]:
     #     skeleton_extract(train_er, a)
 
-    for a in [3, 4, 5]:
-        enh_extract(train_er, a)
-    for a in [3, 4, 5]:
-        enh_extract(train_er2, a)
-    for a in [3, 4, 5]:
-        enh_extract(train_er3, a)
+    # for a in [3, 4, 5]:
+    #     enh_extract(train_er, a)
+    # for a in [3, 4, 5]:
+    #     enh_extract(train_er2, a)
+    # for a in [3, 4, 5]:
+    #     enh_extract(train_er3, a)
 
     # train_er1 = "/home/my/data/DRIVE/train/"
     # for a in [0.5, 1, 1.5]:
@@ -342,6 +382,9 @@ if __name__ == '__main__':
     # train_er2 = "/home/my/data/STARE/train/"
     # for a in [1, 1.5]:
     #     skeleton_extract(train_er2, a)
+    for a in [2, 3]:
+        for b in [1, 2]:
+            diff_extract(train_er, a, b)
 
 
     
