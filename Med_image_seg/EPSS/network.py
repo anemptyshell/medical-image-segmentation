@@ -402,10 +402,10 @@ class epss_net(nn.Module):
         edge_pred, edge_info = self.eme(x1)
 
         """ SFD """
-        s1, loss_mi1, u1 = self.s1(x1)
-        s2, loss_mi2, u2 = self.s2(x2)
-        s3, loss_mi3, u3 = self.s3(x3)
-        s4, loss_mi4, u4 = self.s4(x4)
+        s1, loss_mi1, u1 = self.s1(x1)   ## s1:[1, 128, 256, 256]
+        s2, loss_mi2, u2 = self.s2(x2)   ## s2:[1, 128, 128, 128]
+        s3, loss_mi3, u3 = self.s3(x3)   ## s3:[1, 128, 64, 64]
+        s4, loss_mi4, u4 = self.s4(x4)   ## s4:[1, 128, 32, 32]
 
         """ Decoder """
         d1 = self.d1(s4, s3)
