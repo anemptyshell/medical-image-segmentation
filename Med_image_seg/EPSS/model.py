@@ -13,6 +13,7 @@ from collections import OrderedDict
 from Med_image_seg.unet.loss import BceDiceLoss
 from Med_image_seg.EPSS.network import epss_net
 from Med_image_seg.fang.utils.cldice import clDice
+from Med_image_seg.EPSS.feature import FeatureMapVisualizer
 
 # from matplotlib import pyplot as plt
 import numpy as np
@@ -335,8 +336,17 @@ class EPSS(base_model):
             for iter, data in enumerate(tqdm(test_loader)):
                 images, targets = data
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
-
+                
+                visualizer = FeatureMapVisualizer(save_dir="./test_feature_maps")
                 preds, edge_pred, loss_mi1, loss_mi2, loss_mi3, loss_mi4, s1,s2,s3,s4,u1,u2,u3,u4 = self.network(images)
+
+                visualizer.visualize_s_features(
+                    s1, s2, s3, s4,
+                    image_idx=iter,
+                    method='max',
+                    save=True,
+                    show=True  # 设置为False可加速批量可视化
+                )
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
