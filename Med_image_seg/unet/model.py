@@ -404,7 +404,7 @@ class unet(base_model):
 
                     # 指定目标：针对输出通道 0 (如果是多类分割，可以更换 index)
                     # ClassifierOutputTarget 对于分割模型，默认会聚合空间像素的梯度
-                    cam_targets = [ClassifierOutputTarget(0)]
+                    cam_targets = [SemanticSegmentationTarget(category=0)]
 
                     # 计算 CAM (grayscale_cam 的维度是 [1, H, W])
                     grayscale_cam = cam(input_tensor=input_tensor, targets=cam_targets)
@@ -564,7 +564,19 @@ def safe_hd95(result, reference, voxelspacing=None, connectivity=1):
         # 捕获其他可能的运行时错误
         return np.nan
 
+class SemanticSegmentationTarget:
+    def __init__(self, category, mask=None):
+        self.category = category
+        self.mask = mask
 
+    def __call__(self, model_output):
+        # model_output 维度是 [C, H, W]
+        # 如果没有提供特定 mask，我们对整个通道的激活值求和作为信号源
+        if self.mask is None:
+            return model_output[self.category, :, :].sum()
+        
+        # 如果有 mask（比如只关注预测的前景区域），则只对 mask 区域求和
+        return (model_output[self.category, :, :] * self.mask).sum()
 
 
 
