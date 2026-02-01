@@ -396,7 +396,7 @@ class unet(base_model):
                     plt.savefig(self.args.res_dir +'/'+ str(iter) +'.png')
                     plt.close()
             
-            if iter % 10 == 0: 
+            if iter % 1 == 0: 
                 # 开启梯度计算
                 with torch.set_grad_enabled(True):
                     # 选择输入：取 Batch 中的第一张图并增加 batch 维度 [1, 3, H, W]
@@ -419,7 +419,7 @@ class unet(base_model):
                     visualization = show_cam_on_image(img_to_show, grayscale_cam, use_rgb=True)
 
                     # 保存或处理热图
-                    # cv2.imwrite(f"{save_path}/cam_{iter}.png", visualization[:, :, ::-1]) # RGB 转 BGR 保存
+                    cv2.imwrite(f"{self.args.res_dir}/cam_{iter}.png", visualization[:, :, ::-1]) # RGB 转 BGR 保存
 
                     # if iter % self.args.save_interval == 0:
                     #     save_path = self.args.res_dir
