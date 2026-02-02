@@ -43,7 +43,7 @@ cd ~/mis-ft/medical-image-segmentation
 # python main.py --dataset DRIVE --epochs 200 --phase test --img_size 512 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.005 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score 
 # python main.py --dataset DEEPCRACK --epochs 200 --phase test --img_size 256 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.005 --print_interval 10 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE recall F1_score 
 ## 统一学习率优化器
-python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.0085 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE 
+python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 512 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.0085 --output_end data_aug --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE 
 # python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.0085 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE 
 # python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name unet --batch_size 2 --optimizer_name Adam --lr 0.0085 --print_interval 1 --save_interval 1 --metric_list DSC ACC SEN SPE IoU PRE 
 

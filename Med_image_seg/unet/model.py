@@ -198,7 +198,7 @@ class unet(base_model):
         for iter, data in enumerate(train_loader):
             step += iter
             
-            images, targets = data
+            images, targets, _, _, _ = data
             images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
             preds = self.network(images)

@@ -77,16 +77,16 @@ class RetinaPreprocessor:
             return image_float.astype(np.uint8)
         
         # 归一化到0-255范围
-        # normalized = ((image_float - min_val) / (max_val - min_val)) * 255
+        normalized = ((image_float - min_val) / (max_val - min_val)) * 255
 
-        self.mean = 156.2899
-        self.std = 26.5457
-        img_normalized = (image_float-self.mean)/self.std
+        # self.mean = 156.2899
+        # self.std = 26.5457
+        # img_normalized = (image_float-self.mean)/self.std
         # img_normalized = ((img_normalized - np.min(img_normalized)) 
         #                     / (np.max(img_normalized)-np.min(img_normalized))) * 255.
         # normalized = ((image_float - np.mean(image_float)) / (np.std(image_float) + 1e-8))
         
-        return img_normalized.astype(np.uint8)
+        return normalized.astype(np.uint8)
     
     def apply_clahe(self, image):
         """

@@ -382,8 +382,8 @@ if __name__ == '__main__':
     # train_er2 = "/home/my/data/STARE/train/"
     # for a in [1, 1.5]:
     #     skeleton_extract(train_er2, a)
-    for a in [2, 3]:
-        for b in [1, 2]:
+    for a in [3.5,4]:
+        for b in [1, 1.5]:
             diff_extract(train_er, a, b)
 
 
