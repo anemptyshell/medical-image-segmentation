@@ -226,7 +226,7 @@ class EnhancedFusionWithSqueeze(nn.Module):
         )
         self.attention_module = CAFM(feature_dim=64)
     
-    def _compute_spatial_similarity(self, feat1, feat2, method='conv'):
+    def _compute_spatial_similarity(self, feat1, feat2, method='local_correlation'):
         """
         计算两个2D特征图的空间相似度
         
@@ -313,11 +313,11 @@ class EnhancedFusionWithSqueeze(nn.Module):
         
         # 计算相似度图
         sim_map1 = self._compute_spatial_similarity(
-            fused_strong_squeezed, preds_squeezed, method='conv'
+            fused_strong_squeezed, preds_squeezed, method='local_correlation'
         )  # [bs, 1, h, w]
         
         sim_map2 = self._compute_spatial_similarity(
-            fused_alter_squeezed, preds_squeezed, method='conv'
+            fused_alter_squeezed, preds_squeezed, method='local_correlation'
         )  # [bs, 1, h, w]
         
         # 3. 选择策略得到权重
