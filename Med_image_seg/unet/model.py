@@ -339,22 +339,6 @@ class unet(base_model):
             with torch.no_grad():
                 preds = self.network(images)
 
-                # save_dir = "./attention_visualization"
-                # os.makedirs(save_dir, exist_ok=True)
-                
-                # # 提供完整的保存路径
-                # save_path = f"{save_dir}/attention_batch{iter}.png"
-                # print("使用均值方法可视化注意力热图...")
-                # attention_map = visualizer.visualize(images, method='mean', 
-                #                                      save_path=save_path)
-
-                # # 方法2：使用多种方法比较
-                # print("\n使用多种方法比较注意力热图...")
-                # visualizer.visualize_multiple_methods(images, 
-                #                                      methods=['mean', 'max', 'std', 'l2_norm'],
-                #                                      save_path=save_path)
-
-
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
                 dice_avg_meter.update(dice, images.size(0))
@@ -375,6 +359,10 @@ class unet(base_model):
                 # print('cldc:',cldc)
                 self.cldice_ls.append(cldc)
                 ################################################ 
+                pred_binary = (torch.sigmoid(preds[0:1]) > 0.5).float()
+                gt_binary = targets[0:1].float()
+                # 【核心逻辑】：计算误报区域 (False Positive Mask)
+                fp_mask = ((pred_binary == 1) & (gt_binary == 0)).float()
 
 
                 size = self.args.img_size / 100
@@ -396,34 +384,60 @@ class unet(base_model):
                     plt.savefig(self.args.res_dir +'/'+ str(iter) +'.png')
                     plt.close()
             
+            # if iter % 1 == 0: 
+            #     # 开启梯度计算
+            #     with torch.set_grad_enabled(True):
+            #         # 选择输入：取 Batch 中的第一张图并增加 batch 维度 [1, 3, H, W]
+            #         input_tensor = images[0:1] 
+
+            #         # 指定目标：针对输出通道 0 (如果是多类分割，可以更换 index)
+            #         # ClassifierOutputTarget 对于分割模型，默认会聚合空间像素的梯度
+            #         cam_targets = [SemanticSegmentationTarget(category=0)]
+
+            #         # 计算 CAM (grayscale_cam 的维度是 [1, H, W])
+            #         grayscale_cam = cam(input_tensor=input_tensor, targets=cam_targets)
+            #         grayscale_cam = grayscale_cam[0, :]
+
+            #         # 转换原图用于叠加 (从 Tensor 转为 Numpy RGB)
+            #         img_to_show = input_tensor[0].permute(1, 2, 0).cpu().numpy()
+            #         # 归一化到 [0, 1] 方便显示
+            #         img_to_show = (img_to_show - img_to_show.min()) / (img_to_show.max() - img_to_show.min() + 1e-8)
+
+            #         # 叠加生成热图
+            #         visualization = show_cam_on_image(img_to_show, grayscale_cam, use_rgb=True)
+
+            #         # 保存或处理热图
+            #         cv2.imwrite(f"{self.args.res_dir}/cam_{iter}.png", visualization[:, :, ::-1]) # RGB 转 BGR 保存
+
+
+            # 2. 定向可视化：只关注误报区域
             if iter % 1 == 0: 
-                # 开启梯度计算
-                with torch.set_grad_enabled(True):
-                    # 选择输入：取 Batch 中的第一张图并增加 batch 维度 [1, 3, H, W]
-                    input_tensor = images[0:1] 
-
-                    # 指定目标：针对输出通道 0 (如果是多类分割，可以更换 index)
-                    # ClassifierOutputTarget 对于分割模型，默认会聚合空间像素的梯度
-                    cam_targets = [SemanticSegmentationTarget(category=0)]
-
-                    # 计算 CAM (grayscale_cam 的维度是 [1, H, W])
-                    grayscale_cam = cam(input_tensor=input_tensor, targets=cam_targets)
-                    grayscale_cam = grayscale_cam[0, :]
-
-                    # 转换原图用于叠加 (从 Tensor 转为 Numpy RGB)
-                    img_to_show = input_tensor[0].permute(1, 2, 0).cpu().numpy()
-                    # 归一化到 [0, 1] 方便显示
-                    img_to_show = (img_to_show - img_to_show.min()) / (img_to_show.max() - img_to_show.min() + 1e-8)
-
-                    # 叠加生成热图
-                    visualization = show_cam_on_image(img_to_show, grayscale_cam, use_rgb=True)
-
-                    # 保存或处理热图
-                    cv2.imwrite(f"{self.args.res_dir}/cam_{iter}.png", visualization[:, :, ::-1]) # RGB 转 BGR 保存
-
-                    # if iter % self.args.save_interval == 0:
-                    #     save_path = self.args.res_dir
-                    #     self.save_img(images, targets, output_, iter, save_path)
+                # 检查当前图像是否存在误报区域，如果没有信号，Grad-CAM 会报错
+                if fp_mask.sum() > 0:
+                    # 开启梯度计算
+                    with torch.set_grad_enabled(True):
+                        input_tensor = images[0:1] 
+    
+                        # 【关键修改】：将计算好的 fp_mask 传给 Target 类
+                        # 注意：mask 的维度需要是 [H, W] 或与输出图空间尺寸一致
+                        cam_targets = [SemanticSegmentationTarget(category=0, mask=fp_mask[0, 0])]
+    
+                        # 计算针对误报区域的 CAM
+                        grayscale_cam = cam(input_tensor=input_tensor, targets=cam_targets)
+                        grayscale_cam = grayscale_cam[0, :]
+    
+                        # 转换原图用于叠加
+                        img_to_show = input_tensor[0].permute(1, 2, 0).cpu().numpy()
+                        img_to_show = (img_to_show - img_to_show.min()) / (img_to_show.max() - img_to_show.min() + 1e-8)
+    
+                        # 生成热图
+                        visualization = show_cam_on_image(img_to_show, grayscale_cam, use_rgb=True)
+    
+                        # 保存热图
+                        save_name = f"{self.args.res_dir}/fp_attention_{iter}.png"
+                        cv2.imwrite(save_name, visualization[:, :, ::-1])
+                else:
+                    print(f"Iter {iter}: No False Positive regions found, skipping CAM.")
 
         print('IoU: %.4f' % iou_avg_meter.avg)
         print('Dice: %.4f' % dice_avg_meter.avg)
