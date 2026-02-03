@@ -337,16 +337,38 @@ class EPSS(base_model):
                 images, targets = data
                 images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
                 
-                visualizer = FeatureMapVisualizer(save_dir="./test_feature_maps")
+                # visualizer = FeatureMapVisualizer(save_dir="./test_feature_maps")
                 preds, edge_pred, loss_mi1, loss_mi2, loss_mi3, loss_mi4, s1,s2,s3,s4,u1,u2,u3,u4 = self.network(images)
+                s_list = [s1, s2, s3, s4] 
+                u_list = [u1, u2, u3, u4] 
+                # 准备原图用于底图显示
+                img_np = images[0].permute(1, 2, 0).cpu().numpy()
+                img_np = (img_np - img_np.min()) / (img_np.max() - img_np.min() + 1e-8)
 
-                visualizer.visualize_s_features(
-                    s1, s2, s3, s4,
-                    image_idx=iter,
-                    method='max',
-                    save=True,
-                    show=True  # 设置为False可加速批量可视化
-                )
+                # --- 可视化第一层级 (s1 vs u1) ---
+                vis_s1 = visualize_feature_map(s_list[0], img_np)
+                vis_u1 = visualize_feature_map(u_list[0], img_np)
+
+                # --- 拼接结果并保存 ---
+                # 顺序：[原图 | 重要特征s1 | 不重要特征u1]
+                # 注意可视化时将 RGB 转回 BGR 用于 cv2.imwrite
+                combined = np.hstack([
+                    (img_np * 255).astype(np.uint8)[:, :, ::-1], 
+                    cv2.cvtColor(vis_s1, cv2.COLOR_RGB2BGR), 
+                    cv2.cvtColor(vis_u1, cv2.COLOR_RGB2BGR)
+                ])
+
+                save_path = f"{self.args.res_dir}/layer1_compare_{iter}.png"
+                cv2.imwrite(save_path, combined)
+                
+                # =================================================================
+                # visualizer.visualize_s_features(
+                #     s1, s2, s3, s4,
+                #     image_idx=iter,
+                #     method='max',
+                #     save=True,
+                #     show=True  # 设置为False可加速批量可视化
+                # )
 
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
@@ -400,9 +422,6 @@ class EPSS(base_model):
                     #     os.makedirs(os.path.dirname(save_path), exist_ok=True)
                     #     visualize_feature_maps_mean(feat_map, save_path)
                 
-                # if iter % self.args.save_interval == 0:
-                #     save_path = self.args.res_dir
-                #     self.save_img(images, targets, output_, iter, save_path)
 
         print('IoU: %.4f' % iou_avg_meter.avg)
         print('Dice: %.4f' % dice_avg_meter.avg)
@@ -760,3 +779,37 @@ def safe_hd95(result, reference, voxelspacing=None, connectivity=1):
     #         self.logger.info(log_info)
    
     #     return np.mean(loss_list), dsc
+
+
+
+
+def visualize_feature_map(feature_tensor, original_img_np, title="Feature Map"):
+    """
+    feature_tensor: [1, C, H, W]
+    original_img_np: [H, W, 3] (0-1 float or 0-255 uint8)
+    """
+    # 1. 压缩通道维度：计算通道平均值 (或是 L2 范数)
+    # feature_map = torch.norm(feature_tensor, p=2, dim=1) # L2 范数
+    feature_map = torch.mean(feature_tensor, dim=1).squeeze(0) # 平均值
+    
+    # 2. 归一化到 0-255
+    feature_map = feature_map.detach().cpu().numpy()
+    feature_map = (feature_map - feature_map.min()) / (feature_map.max() - feature_map.min() + 1e-8)
+    feature_map = (feature_map * 255).astype(np.uint8)
+    
+    # 3. 调整大小以匹配原图
+    H, W = original_img_np.shape[:2]
+    feature_map_resized = cv2.resize(feature_map, (W, H))
+    
+    # 4. 生成伪彩色热图
+    heatmap = cv2.applyColorMap(feature_map_resized, cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    
+    # 5. 叠加显示
+    if original_img_np.max() <= 1.0:
+        original_img_np = (original_img_np * 255).astype(np.uint8)
+        
+    alpha = 0.5 # 混合比例
+    overlay = cv2.addWeighted(original_img_np, 1 - alpha, heatmap, alpha, 0)
+    
+    return overlay
