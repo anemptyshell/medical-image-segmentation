@@ -339,6 +339,11 @@ class unet(base_model):
             with torch.no_grad():
                 preds = self.network(images)
 
+                prob = torch.sigmoid(preds[0:1])
+                pred_mask = (prob > 0.5).float()
+                gt_mask = targets[0:1].float()
+                fp_mask_tensor = ((pred_mask == 1) & (gt_mask == 0)).float()
+
                 iou, dice, hd, hd95, recall, specificity, precision, sensitivity = indicators_1(preds, targets)
                 iou_avg_meter.update(iou, images.size(0))
                 dice_avg_meter.update(dice, images.size(0))
@@ -359,10 +364,7 @@ class unet(base_model):
                 # print('cldc:',cldc)
                 self.cldice_ls.append(cldc)
                 ################################################ 
-                pred_binary = (torch.sigmoid(preds[0:1]) > 0.5).float()
-                gt_binary = targets[0:1].float()
-                # 【核心逻辑】：计算误报区域 (False Positive Mask)
-                fp_mask = ((pred_binary == 1) & (gt_binary == 0)).float()
+               
 
 
                 size = self.args.img_size / 100
@@ -412,33 +414,43 @@ class unet(base_model):
 
             # 2. 定向可视化：只关注误报区域
             if iter % 1 == 0: 
-                # 检查当前图像是否存在误报区域，如果没有信号，Grad-CAM 会报错
-                if fp_mask.sum() > 0:
-                    # 开启梯度计算
+            # 只有存在误报时才分析，否则没有梯度信号
+                if fp_mask_tensor.sum() > 0:
                     with torch.set_grad_enabled(True):
-                        input_tensor = images[0:1] 
-    
-                        # 【关键修改】：将计算好的 fp_mask 传给 Target 类
-                        # 注意：mask 的维度需要是 [H, W] 或与输出图空间尺寸一致
-                        cam_targets = [SemanticSegmentationTarget(category=0, mask=fp_mask[0, 0])]
-    
-                        # 计算针对误报区域的 CAM
-                        grayscale_cam = cam(input_tensor=input_tensor, targets=cam_targets)
+                        # 传入 FP Mask 
+                        cam_targets = [SemanticSegmentationTarget(category=0, mask=fp_mask_tensor[0, 0])]
+                        grayscale_cam = cam(input_tensor=images[0:1], targets=cam_targets)
                         grayscale_cam = grayscale_cam[0, :]
     
-                        # 转换原图用于叠加
-                        img_to_show = input_tensor[0].permute(1, 2, 0).cpu().numpy()
-                        img_to_show = (img_to_show - img_to_show.min()) / (img_to_show.max() - img_to_show.min() + 1e-8)
+                    # --- 图像处理与拼接 ---
+                    # A. 原图
+                    img_np = images[0].permute(1, 2, 0).cpu().numpy()
+                    img_np = (img_np - img_np.min()) / (img_np.max() - img_np.min() + 1e-8)
+                    img_np = (img_np * 255).astype(np.uint8)
     
-                        # 生成热图
-                        visualization = show_cam_on_image(img_to_show, grayscale_cam, use_rgb=True)
+                    # B. 预测掩码 (绿色)
+                    pred_np = (pred_mask[0, 0].cpu().numpy() * 255).astype(np.uint8)
+                    pred_color = cv2.cvtColor(pred_np, cv2.COLOR_GRAY2BGR)
+                    pred_color[:, :, 1] = pred_np # 绿色通道
     
-                        # 保存热图
-                        save_name = f"{self.args.res_dir}/fp_attention_{iter}.png"
-                        cv2.imwrite(save_name, visualization[:, :, ::-1])
+                    # C. FP 掩码 (红色)
+                    fp_np = (fp_mask_tensor[0, 0].cpu().numpy() * 255).astype(np.uint8)
+                    fp_color = cv2.cvtColor(fp_np, cv2.COLOR_GRAY2BGR)
+                    fp_color[:, :, 2] = fp_np # 红色通道
+    
+                    # D. 热图叠加
+                    heatmap_vis = show_cam_on_image(img_np/255.0, grayscale_cam, use_rgb=True)
+                    heatmap_vis = cv2.cvtColor(heatmap_vis, cv2.COLOR_RGB2BGR) # 转 BGR 用于 opencv 保存
+    
+                    # --- 横向拼接: 原图 | 预测 | FP掩码 | 热图 ---
+                    img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+                    combined_img = np.hstack([img_bgr, pred_color, fp_color, heatmap_vis])
+    
+                    save_path = os.path.join(self.args.res_dir, f"compare_fp_{iter}.png")
+                    cv2.imwrite(save_path, combined_img)
                 else:
-                    print(f"Iter {iter}: No False Positive regions found, skipping CAM.")
-
+                    print(f"Iter {iter}: 无误报区域，跳过可视化。")
+    
         print('IoU: %.4f' % iou_avg_meter.avg)
         print('Dice: %.4f' % dice_avg_meter.avg)
         print('Hd: %.4f' % hd_avg_meter.avg)
@@ -578,22 +590,34 @@ def safe_hd95(result, reference, voxelspacing=None, connectivity=1):
         # 捕获其他可能的运行时错误
         return np.nan
 
+# class SemanticSegmentationTarget:
+    # def __init__(self, category, mask=None):
+    #     self.category = category
+    #     self.mask = mask
+
+    # def __call__(self, model_output):
+    #     # model_output 维度是 [C, H, W]
+    #     # 如果没有提供特定 mask，我们对整个通道的激活值求和作为信号源
+    #     if self.mask is None:
+    #         return model_output[self.category, :, :].sum()
+        
+    #     # 如果有 mask（比如只关注预测的前景区域），则只对 mask 区域求和
+    #     return (model_output[self.category, :, :] * self.mask).sum()
+
+
 class SemanticSegmentationTarget:
     def __init__(self, category, mask=None):
         self.category = category
         self.mask = mask
 
     def __call__(self, model_output):
-        # model_output 维度是 [C, H, W]
-        # 如果没有提供特定 mask，我们对整个通道的激活值求和作为信号源
-        if self.mask is None:
-            return model_output[self.category, :, :].sum()
+        # 确保 mask 和模型输出在同一个设备上
+        if self.mask is not None:
+            mask = self.mask.to(model_output.device)
+            # 点乘只保留误报区域的响应值，然后求和
+            return (model_output[self.category] * mask).sum()
         
-        # 如果有 mask（比如只关注预测的前景区域），则只对 mask 区域求和
-        return (model_output[self.category, :, :] * self.mask).sum()
-
-
-
+        return model_output[self.category].sum()
 
 
 
