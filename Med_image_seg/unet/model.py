@@ -329,7 +329,7 @@ class unet(base_model):
         precision_avg_meter = AverageMeter()
         sensitivity_avg_meter = AverageMeter()
         # visualizer = U_Net_Attention_Visualizer(self.network)
-        target_layers = [self.network.Conv_1x1]
+        target_layers = [self.network.Conv3]
         cam = GradCAM(model=self.network, target_layers=target_layers)
 
         # with torch.no_grad():
@@ -419,6 +419,7 @@ class unet(base_model):
                     with torch.set_grad_enabled(True):
                         # 传入 FP Mask 
                         cam_targets = [SemanticSegmentationTarget(category=0, mask=fp_mask_tensor[0, 0])]
+                        # cam_targets = [SemanticSegmentationTarget(category=0)]
                         grayscale_cam = cam(input_tensor=images[0:1], targets=cam_targets)
                         grayscale_cam = grayscale_cam[0, :]
     
@@ -591,18 +592,18 @@ def safe_hd95(result, reference, voxelspacing=None, connectivity=1):
         return np.nan
 
 # class SemanticSegmentationTarget:
-    # def __init__(self, category, mask=None):
-    #     self.category = category
-    #     self.mask = mask
+#     def __init__(self, category, mask=None):
+#         self.category = category
+#         self.mask = mask
 
-    # def __call__(self, model_output):
-    #     # model_output 维度是 [C, H, W]
-    #     # 如果没有提供特定 mask，我们对整个通道的激活值求和作为信号源
-    #     if self.mask is None:
-    #         return model_output[self.category, :, :].sum()
+#     def __call__(self, model_output):
+#         # model_output 维度是 [C, H, W]
+#         # 如果没有提供特定 mask，我们对整个通道的激活值求和作为信号源
+#         if self.mask is None:
+#             return model_output[self.category, :, :].sum()
         
-    #     # 如果有 mask（比如只关注预测的前景区域），则只对 mask 区域求和
-    #     return (model_output[self.category, :, :] * self.mask).sum()
+#         # 如果有 mask（比如只关注预测的前景区域），则只对 mask 区域求和
+#         return (model_output[self.category, :, :] * self.mask).sum()
 
 
 class SemanticSegmentationTarget:

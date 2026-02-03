@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from Med_image_seg.fang1.model_util.resnet import resnet34
-
+# from model_util.resnet import resnet34
 
 class conv_block(nn.Module):
     def __init__(self, ch_in, ch_out):
@@ -64,14 +64,15 @@ class U_Net_resnet(nn.Module):
         ## x torch.Size([2, 3, 512, 512])
         # encoder
         ##--------------resnet----------------
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
+        x = self.backbone.conv1(x)  ## [2, 64, 512, 512]
+        x = self.backbone.bn1(x)    ## [2, 64, 512, 512]
+        x = self.backbone.relu(x)   ## [2, 64, 512, 512]
+        # print(x.size())
 
-        x1 = self.backbone.layer1(x)
-        x2 = self.backbone.layer2(x1) 
-        x3 = self.backbone.layer3(x2) 
-        x4 = self.backbone.layer4(x3)
+        x1 = self.backbone.layer1(x)   ## [2, 64, 512, 512]
+        x2 = self.backbone.layer2(x1)  ## [2, 128, 256, 256]
+        x3 = self.backbone.layer3(x2)  ## [2, 256, 128, 128]
+        x4 = self.backbone.layer4(x3)  ## [2, 512, 64, 64]
 
         x5 = self.backbone.maxpool(x4)
         x5 = self.Conv5(x5) 
@@ -138,7 +139,7 @@ class U_Net_resnet(nn.Module):
 
 
 # """随机张量测试"""    
-# unet = U_Net()
+# unet = U_Net_resnet()
 # a = torch.rand(2, 3, 512, 512)
 # # a = torch.rand(2, 3, 224, 224)
 # output = unet.forward(a)
