@@ -348,6 +348,12 @@ class EPSS(base_model):
                 # --- 可视化第一层级 (s1 vs u1) ---
                 vis_s1 = visualize_feature_map(s_list[0], img_np)
                 vis_u1 = visualize_feature_map(u_list[0], img_np)
+                vis_s2 = visualize_feature_map(s_list[1], img_np)
+                vis_u2 = visualize_feature_map(u_list[1], img_np)
+                vis_s3 = visualize_feature_map(s_list[2], img_np)
+                vis_u3 = visualize_feature_map(u_list[2], img_np)
+                vis_s4 = visualize_feature_map(s_list[3], img_np)
+                vis_u4 = visualize_feature_map(u_list[3], img_np)
 
                 # --- 拼接结果并保存 ---
                 # 顺序：[原图 | 重要特征s1 | 不重要特征u1]
@@ -355,7 +361,13 @@ class EPSS(base_model):
                 combined = np.hstack([
                     (img_np * 255).astype(np.uint8)[:, :, ::-1], 
                     cv2.cvtColor(vis_s1, cv2.COLOR_RGB2BGR), 
-                    cv2.cvtColor(vis_u1, cv2.COLOR_RGB2BGR)
+                    cv2.cvtColor(vis_u1, cv2.COLOR_RGB2BGR),
+                    cv2.cvtColor(vis_s2, cv2.COLOR_RGB2BGR), 
+                    cv2.cvtColor(vis_u2, cv2.COLOR_RGB2BGR),
+                    cv2.cvtColor(vis_s3, cv2.COLOR_RGB2BGR), 
+                    cv2.cvtColor(vis_u3, cv2.COLOR_RGB2BGR),
+                    cv2.cvtColor(vis_s4, cv2.COLOR_RGB2BGR), 
+                    cv2.cvtColor(vis_u4, cv2.COLOR_RGB2BGR)
                 ])
 
                 save_path = f"{self.args.res_dir}/layer1_compare_{iter}.png"
@@ -410,12 +422,12 @@ class EPSS(base_model):
                     plt.savefig(self.args.res_dir +'/'+ str(iter) +'.png')
                     plt.close()
 
-                    stages = {
-                        'stage1': u1,  # 从forward中获取
-                        'stage2': u2,
-                        'stage3': u3,
-                        'stage4': u4
-                    }
+                    # stages = {
+                    #     'stage1': u1,  # 从forward中获取
+                    #     'stage2': u2,
+                    #     'stage3': u3,
+                    #     'stage4': u4
+                    # }
 
                     # for name, feat_map in stages.items():
                     #     save_path = f'{self.args.res_dir}/features/{name}/iter_{iter}.png'

@@ -9,308 +9,49 @@ import cv2
 
 
 """isic17/18"""
-# class myToTensor:
-#     def __init__(self):
-#         pass
-#     def __call__(self, data):
-#         image, mask = data
-#         return torch.tensor(image).permute(2,0,1), torch.tensor(mask).permute(2,0,1)
-       
-
-# class myResize:
-#     def __init__(self, image_size_h=256, image_size_w=256):
-#         self.image_size_h = image_size_h
-#         self.image_size_w = image_size_w
-#     def __call__(self, data):
-#         image, mask = data
-#         return TF.resize(image, [self.image_size_h, self.image_size_w], antialias=True), TF.resize(mask, [self.image_size_h, self.image_size_w], antialias=True)
-       
-
-# class myRandomHorizontalFlip:
-#     def __init__(self, p=0.5):
-#         self.p = p
-#     def __call__(self, data):
-#         image, mask = data
-#         if random.random() < self.p: return TF.hflip(image), TF.hflip(mask)
-#         else: return image, mask
-            
-
-# class myRandomVerticalFlip:
-#     def __init__(self, p=0.5):
-#         self.p = p
-#     def __call__(self, data):
-#         image, mask = data
-#         if random.random() < self.p: return TF.vflip(image), TF.vflip(mask)
-#         else: return image, mask
-
-
-# class myRandomRotation:
-#     def __init__(self, p=0.5, degree=[0,360]):
-#         self.angle = random.uniform(degree[0], degree[1])
-#         self.p = p
-#     def __call__(self, data):
-#         image, mask = data
-#         if random.random() < self.p: return TF.rotate(image,self.angle), TF.rotate(mask,self.angle)
-#         else: return image, mask 
-
-
-# class myNormalize:
-#     def __init__(self, dataset, train=True):
-#         if dataset == 'isic2018':
-#             if train:
-#                 self.mean = 157.561
-#                 self.std = 26.706
-#             else:
-#                 self.mean = 149.034
-#                 self.std = 32.022
-#         elif dataset == 'isic2017':
-#             if train:
-#                 self.mean = 159.922
-#                 self.std = 28.871
-#             else:
-#                 self.mean = 148.429
-#                 self.std = 25.748
-#         # elif dataset == 'isic18_82':
-#         else:
-#             if train:
-#                 self.mean = 156.2899
-#                 self.std = 26.5457
-#             else:
-#                 self.mean = 149.8485
-#                 self.std = 35.3346
-            
-#     def __call__(self, data):
-#         img, msk = data
-#         img_normalized = (img-self.mean)/self.std
-#         img_normalized = ((img_normalized - np.min(img_normalized)) 
-#                             / (np.max(img_normalized)-np.min(img_normalized))) * 255.
-#         return img_normalized, msk
-
- 
-
-# class convert_to_grayscale:
-#     def __init__(self, p=0.5):
-#         self.p = p
-#     def __call__(self, data):
-#         image, mask = data
-#         if len(image.shape) == 3:
-#             # 使用加权平均法进行灰度化（OpenCV默认方法）
-#             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#         else:
-#             image = image.copy()
-#         return image, mask
-
-# class normalize_image:
-#     def __init__(self, p=0.5):
-#         self.p = p
-#     def __call__(self, data):
-#         image, mask = data
-#         image_float = image.astype(np.float32)
-#         # 获取最小值和最大值
-#         min_val = np.min(image_float)
-#         max_val = np.max(image_float)
-
-#         # 避免除以零
-#         if max_val - min_val == 0:
-#             return image_float.astype(np.uint8)
-
-#         # 归一化到0-255范围
-#         normalized = ((image_float - min_val) / (max_val - min_val)) * 255
-
-#         return normalized.astype(np.uint8), mask
-
-
-# class apply_clahe:
-#     def __init__(self, clahe_clip_limit=2.0, clahe_grid_size=(8, 8)):
-#         self.clahe_clip_limit = clahe_clip_limit
-#         self.clahe_grid_size = clahe_grid_size
-#     def __call__(self, data):
-#         image, mask = data
-#         # 创建CLAHE对象
-#         clahe = cv2.createCLAHE(
-#             clipLimit=self.clahe_clip_limit,
-#             tileGridSize=self.clahe_grid_size
-#         )
-
-#         # 应用CLAHE
-#         clahe_image = clahe.apply(image)
-
-#         return clahe_image, mask
-    
-# class apply_gamma_correction:
-#     def __init__(self, gamma=0.5):
-#         self.gamma = gamma
-#     def __call__(self, data):
-#         image, mask = data
-#         image_normalized = image.astype(np.float32) / 255.0
-#         gamma_corrected = np.power(image_normalized, self.gamma)
-#         gamma_corrected = (gamma_corrected * 255).astype(np.uint8)
-
-#         return gamma_corrected, mask
-
-    
-
-
-# def get_transform(parser, opt):
-    
-#     opt = parser.get_args()
-#     train_transformer = transforms.Compose([
-#         myNormalize(opt.dataset, train=True),
-#         convert_to_grayscale(p=0.5),
-#         apply_clahe(clahe_clip_limit=2.0, clahe_grid_size=(8, 8)),
-#         apply_gamma_correction(gamma=0.5),
-#         myToTensor(),
-#         myRandomHorizontalFlip(p=0.5),
-#         myRandomVerticalFlip(p=0.5),
-#         myRandomRotation(p=0.5, degree=[0, 360]),
-#         myResize(opt.img_size, opt.img_size)
-#     ])
-#     test_transformer = transforms.Compose([
-#         myNormalize(opt.dataset, train=False),
-#         convert_to_grayscale(p=0.5),
-#         apply_clahe(clahe_clip_limit=2.0, clahe_grid_size=(8, 8)),
-#         apply_gamma_correction(gamma=0.5),
-#         myToTensor(),
-#         myResize(opt.img_size, opt.img_size)
-#     ])
-
-
-#     return train_transformer, test_transformer
-
-
-import cv2
-import numpy as np
-import torch
-import torchvision.transforms.functional as TF
-from torchvision import transforms
-import random
-
-
 class myToTensor:
     def __init__(self):
         pass
-    
     def __call__(self, data):
         image, mask = data
-        
-        # 处理图像
-        if isinstance(image, np.ndarray):
-            if len(image.shape) == 2:  # 如果是灰度图，添加通道维度 [H, W] -> [1, H, W]
-                image = np.expand_dims(image, axis=0)
-            elif len(image.shape) == 3 and image.shape[2] in [1, 3]:  # [H, W, C] -> [C, H, W]
-                image = image.transpose(2, 0, 1)
-            # 转换为torch tensor
-            image = torch.from_numpy(image.copy()).float()
-        else:
-            image = torch.tensor(image).float()
-            if len(image.shape) == 2:  # 如果是灰度图，添加通道维度
-                image = image.unsqueeze(0)
-            elif len(image.shape) == 3 and image.shape[2] in [1, 3]:  # [H, W, C] -> [C, H, W]
-                image = image.permute(2, 0, 1)
-        
-        # 处理mask
-        if isinstance(mask, np.ndarray):
-            if len(mask.shape) == 2:  # 如果是单通道mask
-                mask = np.expand_dims(mask, axis=0)
-            elif len(mask.shape) == 3 and mask.shape[2] == 1:  # [H, W, 1] -> [1, H, W]
-                mask = mask.transpose(2, 0, 1)
-            # 转换为torch tensor
-            mask = torch.from_numpy(mask.copy()).float()
-        else:
-            mask = torch.tensor(mask).float()
-            if len(mask.shape) == 2:  # 如果是单通道mask
-                mask = mask.unsqueeze(0)
-            elif len(mask.shape) == 3 and mask.shape[2] == 1:  # [H, W, 1] -> [1, H, W]
-                mask = mask.permute(2, 0, 1)
-        
-        return image, mask
-
+        return torch.tensor(image).permute(2,0,1), torch.tensor(mask).permute(2,0,1)
+       
 
 class myResize:
     def __init__(self, image_size_h=256, image_size_w=256):
         self.image_size_h = image_size_h
         self.image_size_w = image_size_w
-    
     def __call__(self, data):
         image, mask = data
-        
-        # 确保是torch tensor
-        if not torch.is_tensor(image):
-            image = torch.from_numpy(image).float()
-        if not torch.is_tensor(mask):
-            mask = torch.from_numpy(mask).float()
-        
-        # 调整维度顺序为 [C, H, W]
-        if len(image.shape) == 3:
-            if image.shape[0] > 3:  # 可能是 [H, W, C] 格式
-                image = image.permute(2, 0, 1)
-        else:
-            image = image.unsqueeze(0)  # 添加通道维度
-        
-        if len(mask.shape) == 3:
-            if mask.shape[0] > 1:  # 可能是 [H, W, C] 格式
-                mask = mask.permute(2, 0, 1)
-        else:
-            mask = mask.unsqueeze(0)  # 添加通道维度
-        
-        # 调整大小
-        image_resized = TF.resize(image, [self.image_size_h, self.image_size_w], antialias=True)
-        mask_resized = TF.resize(mask, [self.image_size_h, self.image_size_w], antialias=True)
-        
-        return image_resized, mask_resized
-
+        return TF.resize(image, [self.image_size_h, self.image_size_w], antialias=True), TF.resize(mask, [self.image_size_h, self.image_size_w], antialias=True)
+       
 
 class myRandomHorizontalFlip:
     def __init__(self, p=0.5):
         self.p = p
-    
     def __call__(self, data):
         image, mask = data
-        if random.random() < self.p:
-            if torch.is_tensor(image):
-                return TF.hflip(image), TF.hflip(mask)
-            else:
-                return np.fliplr(image), np.fliplr(mask)
-        else:
-            return image, mask
-
+        if random.random() < self.p: return TF.hflip(image), TF.hflip(mask)
+        else: return image, mask
+            
 
 class myRandomVerticalFlip:
     def __init__(self, p=0.5):
         self.p = p
-    
     def __call__(self, data):
         image, mask = data
-        if random.random() < self.p:
-            if torch.is_tensor(image):
-                return TF.vflip(image), TF.vflip(mask)
-            else:
-                return np.flipud(image), np.flipud(mask)
-        else:
-            return image, mask
+        if random.random() < self.p: return TF.vflip(image), TF.vflip(mask)
+        else: return image, mask
 
 
 class myRandomRotation:
-    def __init__(self, p=0.5, degree=[0, 360]):
+    def __init__(self, p=0.5, degree=[0,360]):
+        self.angle = random.uniform(degree[0], degree[1])
         self.p = p
-        self.degree = degree
-    
     def __call__(self, data):
         image, mask = data
-        if random.random() < self.p:
-            angle = random.uniform(self.degree[0], self.degree[1])
-            if torch.is_tensor(image):
-                return TF.rotate(image, angle), TF.rotate(mask, angle)
-            else:
-                # 使用OpenCV旋转
-                h, w = image.shape[:2]
-                center = (w // 2, h // 2)
-                M = cv2.getRotationMatrix2D(center, angle, 1.0)
-                image_rotated = cv2.warpAffine(image, M, (w, h))
-                mask_rotated = cv2.warpAffine(mask, M, (w, h))
-                return image_rotated, mask_rotated
-        else:
-            return image, mask
+        if random.random() < self.p: return TF.rotate(image,self.angle), TF.rotate(mask,self.angle)
+        else: return image, mask 
 
 
 class myNormalize:
@@ -329,6 +70,7 @@ class myNormalize:
             else:
                 self.mean = 148.429
                 self.std = 25.748
+        # elif dataset == 'isic18_82':
         else:
             if train:
                 self.mean = 156.2899
@@ -336,127 +78,20 @@ class myNormalize:
             else:
                 self.mean = 149.8485
                 self.std = 35.3346
-    
+            
     def __call__(self, data):
         img, msk = data
-        
-        # 如果是tensor，转换为numpy
-        if torch.is_tensor(img):
-            img = img.numpy()
-        
-        # 确保是浮点数
-        img_float = img.astype(np.float32)
-        
-        # 应用归一化
-        img_normalized = (img_float - self.mean) / self.std
-        
-        # 归一化到0-255范围
-        min_val = np.min(img_normalized)
-        max_val = np.max(img_normalized)
-        
-        if max_val - min_val > 0:
-            img_normalized = ((img_normalized - min_val) / (max_val - min_val)) * 255.0
-        else:
-            img_normalized = img_normalized * 255.0
-        
-        return img_normalized.astype(np.uint8), msk
+        img_normalized = (img-self.mean)/self.std
+        img_normalized = ((img_normalized - np.min(img_normalized)) 
+                            / (np.max(img_normalized)-np.min(img_normalized))) * 255.
+        return img_normalized, msk
 
-
-class convert_to_grayscale:
-    def __init__(self, p=1.0):
-        self.p = p
-    
-    def __call__(self, data):
-        image, mask = data
-        
-        # 确保是numpy数组
-        if torch.is_tensor(image):
-            image = image.numpy()
-        
-        # 随机决定是否应用
-        if random.random() < self.p:
-            if len(image.shape) == 3 and image.shape[2] == 3:
-                # RGB转灰度
-                image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-            elif len(image.shape) == 3 and image.shape[2] == 1:
-                # 已经是单通道，压缩维度
-                image = image.squeeze(2)
-        
-        return image, mask
-
-
-class apply_clahe:
-    def __init__(self, clahe_clip_limit=2.0, clahe_grid_size=(8, 8)):
-        self.clahe_clip_limit = clahe_clip_limit
-        self.clahe_grid_size = clahe_grid_size
-    
-    def __call__(self, data):
-        image, mask = data
-        
-        # 确保是numpy数组
-        if torch.is_tensor(image):
-            image = image.numpy()
-        
-        # 确保是2D图像
-        if len(image.shape) == 3:
-            if image.shape[2] == 1 or image.shape[2] == 3:
-                image = image.squeeze()
-        
-        # 确保是uint8类型
-        if image.dtype != np.uint8:
-            if image.max() <= 1.0:
-                image = (image * 255).astype(np.uint8)
-            else:
-                image = image.astype(np.uint8)
-        
-        # 应用CLAHE
-        try:
-            clahe = cv2.createCLAHE(
-                clipLimit=self.clahe_clip_limit,
-                tileGridSize=self.clahe_grid_size
-            )
-            clahe_image = clahe.apply(image)
-        except Exception as e:
-            print(f"Warning: CLAHE failed: {e}")
-            clahe_image = image
-        
-        return clahe_image, mask
-
-
-class apply_gamma_correction:
-    def __init__(self, gamma=0.5):
-        self.gamma = gamma
-    
-    def __call__(self, data):
-        image, mask = data
-        
-        # 确保是numpy数组
-        if torch.is_tensor(image):
-            image = image.numpy()
-        
-        # 确保是uint8类型
-        if image.dtype != np.uint8:
-            if image.max() <= 1.0:
-                image = (image * 255).astype(np.uint8)
-            else:
-                image = image.astype(np.uint8)
-        
-        # 应用gamma校正
-        image_normalized = image.astype(np.float32) / 255.0
-        gamma_corrected = np.power(image_normalized, self.gamma)
-        gamma_corrected = (gamma_corrected * 255).astype(np.uint8)
-        
-        return gamma_corrected, mask
 
 
 def get_transform(parser, opt):
-    opt = parser.get_args()
     
-    # 训练时的变换顺序
+    opt = parser.get_args()
     train_transformer = transforms.Compose([
-        convert_to_grayscale(p=1.0),
-        apply_clahe(clahe_clip_limit=2.0, clahe_grid_size=(8, 8)),
-        apply_gamma_correction(gamma=0.5),
         myNormalize(opt.dataset, train=True),
         myToTensor(),
         myRandomHorizontalFlip(p=0.5),
@@ -464,20 +99,14 @@ def get_transform(parser, opt):
         myRandomRotation(p=0.5, degree=[0, 360]),
         myResize(opt.img_size, opt.img_size)
     ])
-    
-    # 测试时的变换顺序
     test_transformer = transforms.Compose([
-        convert_to_grayscale(p=1.0),
-        apply_clahe(clahe_clip_limit=2.0, clahe_grid_size=(8, 8)),
-        apply_gamma_correction(gamma=0.5),
         myNormalize(opt.dataset, train=False),
         myToTensor(),
         myResize(opt.img_size, opt.img_size)
     ])
-    
+
+
     return train_transformer, test_transformer
-
-
 
 
 """---------------------下面不用看---------------------------------"""

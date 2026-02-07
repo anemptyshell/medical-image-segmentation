@@ -4,6 +4,7 @@ from scipy.ndimage import distance_transform_edt
 import matplotlib.pyplot as plt
 import cv2
 import torch
+import os
 
 def generate_custom_skeleton(binary_image, a=1):
     """
@@ -211,7 +212,8 @@ def generate_custom_skeleton_alternative_2(binary_image, aaa=1, bbb=1):
     # custom_skeleton_or = np.logical_or(custom_skeleton_b_and, custom_skeleton_a) 
     difference = np.logical_and(custom_skeleton_a, ~custom_skeleton_b_and.astype(bool))
     
-    return edt, custom_skeleton_b_and, difference, custom_skeleton_a
+    # return edt, custom_skeleton_b_and, difference, custom_skeleton_a
+    return difference
 
 
 
@@ -244,37 +246,96 @@ def generate_custom_skeleton_alternative_2(binary_image, aaa=1, bbb=1):
 # plt.show()
 
 
+def diff_extract(root, a, b):
+    img_root = os.path.join(root, 'masks')
+    skeleton_root = os.path.join(root, f'end_{a}_{b}')
+    
+    if not os.path.exists(skeleton_root):
+        os.makedirs(skeleton_root)  
 
-image_path = "21.png"
+    file_names = os.listdir(img_root)
+    for name in file_names:
+        img_path = os.path.join(img_root, name)
+        if name.lower().endswith('.gif'):
+            cap = cv2.VideoCapture(img_path)
+            ret, img = cap.read()
+            cap.release()
+            if not ret:
+                print(f"无法读取GIF图像: {name}")
+                continue
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            img = cv2.imread(img_path, -1)
+            if img is None:
+                print(f"无法读取图像: {name}")
+                continue
+        img = img.astype(np.uint8)
+        img[img <= 100] = 0
+        img[img > 100] = 1
+        custom_skeleton = generate_custom_skeleton_alternative_2(img, aaa=a, bbb=b)
+        custom_skeleton_uint8 = custom_skeleton.astype(np.uint8) * 255
 
-cap = cv2.VideoCapture(image_path)
-ret, img = cap.read()
-cap.release()
-img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-img = img.astype(np.uint8)
-img[img <= 100] = 0
-img[img > 100] = 1
+        base_name = os.path.splitext(name)[0]
+        output_name = f"{base_name}.png"
+        save_path = os.path.join(skeleton_root, output_name)
 
-# a_values = [1.5, 2]
+        if cv2.imwrite(save_path, custom_skeleton_uint8):
+            print(f"成功保存骨架图像: {save_path}")
+        else:
+            print(f"保存骨架图像失败: {save_path}")
+    
+    return 0
+
+
+
+if __name__ == '__main__':
+    train_er = "/home/my/data/CHASE_DB1/train/"
+    train_er2 = "/home/my/data/DRIVE/train/"
+    train_er3 = "/home/my/data/STARE/train/"
+    # edge_extract(train_er)
+
+    
+    diff_extract(train_er2, 1, 1)
+    diff_extract(train_er2, 2, 2)
+
+    # for a in [2, 3]:
+    #     for b in [1,2,3]:
+            # diff_extract(train_er, a, b)
+            # diff_extract(train_er2, a, b)
+            # diff_extract(train_er3, a, b)
+
+
+
+# image_path = "21.png"
+
+# cap = cv2.VideoCapture(image_path)
+# ret, img = cap.read()
+# cap.release()
+# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# img = img.astype(np.uint8)
+# img[img <= 100] = 0
+# img[img > 100] = 1
+
+# # a_values = [1.5, 2]
+# # fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+# # axes = axes.ravel()
+
+# # for i, a in enumerate(a_values):
+# #     edt, skeleton, custom_skeleton, difference = generate_custom_skeleton_alternative(img, a=a)
+# #     axes[i].imshow(difference, cmap='gray')
+# #     axes[i].set_title(f'difference Skeleton (a={a})')
+# #     axes[i].axis('off')
+
+# # plt.tight_layout()
+# # plt.show()
+# # 1 0.5/  1.5 0.5/  2 0.5
+# a_values = [(2, 0.5), (2, 1.5)]
 # fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 # axes = axes.ravel()
-
 # for i, a in enumerate(a_values):
-#     edt, skeleton, custom_skeleton, difference = generate_custom_skeleton_alternative(img, a=a)
+#     edt, skeleton, difference, custom_skeleton_a = generate_custom_skeleton_alternative_2(img, aaa=a[0], bbb=a[1])
 #     axes[i].imshow(difference, cmap='gray')
 #     axes[i].set_title(f'difference Skeleton (a={a})')
 #     axes[i].axis('off')
-
 # plt.tight_layout()
 # plt.show()
-# 1 0.5/  1.5 0.5/  2 0.5
-a_values = [(2, 0.5), (2, 1.5)]
-fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-axes = axes.ravel()
-for i, a in enumerate(a_values):
-    edt, skeleton, difference, custom_skeleton_a = generate_custom_skeleton_alternative_2(img, aaa=a[0], bbb=a[1])
-    axes[i].imshow(difference, cmap='gray')
-    axes[i].set_title(f'difference Skeleton (a={a})')
-    axes[i].axis('off')
-plt.tight_layout()
-plt.show()
