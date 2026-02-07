@@ -73,7 +73,7 @@ cd ~/mis-ft/medical-image-segmentation
 
 
 
-# python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name rollingunet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
+python main.py --dataset STARE --epochs 200 --phase test --img_size 256 --model_name rollingunet --batch_size 2 --lr 0.005 --output_end 1 --print_interval 1 --save_interval 1
 
 # python main.py --dataset CHASE_DB1 --epochs 200 --phase test --img_size 256 --model_name unet_resnet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
 # python main.py --dataset DRIVE --epochs 200 --phase test --img_size 256 --model_name unet_resnet --batch_size 2 --lr 0.005 --print_interval 1 --save_interval 1
@@ -177,7 +177,7 @@ cd ~/mis-ft/medical-image-segmentation
 
 
 # python main.py --dataset CHASE_DB1 --epochs 300 --phase train --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_end lr0.0085 --print_interval 1 --save_interval 1 
-python main.py --dataset CHASE_DB1 --epochs 300 --phase test --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_end lr0.0085 --print_interval 1 --save_interval 1 
+# python main.py --dataset CHASE_DB1 --epochs 300 --phase test --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_end lr0.0085 --print_interval 1 --save_interval 1 
 # python main.py --dataset DRIVE --epochs 300 --phase train --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_end lr0.0085 --print_interval 1 --save_interval 1 
 # python main.py --dataset DRIVE --epochs 300 --phase test --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_end lr0.0085 --print_interval 1 --save_interval 1 
 # python main.py --dataset STARE --epochs 300 --phase train --img_size 512 --model_name EPSS --batch_size 2 --lr 0.0085 --output_end lr0.0085 --print_interval 1 --save_interval 1 
